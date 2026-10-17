@@ -118,7 +118,17 @@ def _parse_mastery(full_text: str) -> list[tuple[str, float]]:
     return scores
 
 
-_CITATION_RE = re.compile(r"\[(\d{1,2})\]")
+# Citações como [3], [2, 6] ou [1-3]
+_CITATION_RE = re.compile(r"\[(\d{1,2}(?:\s*[,–-]\s*\d{1,2})*)\]")
+
+
+def _cited_numbers(text: str) -> set[int]:
+    nums: set[int] = set()
+    for group in _CITATION_RE.findall(text):
+        for part in group.split(","):
+            bounds = [int(n) for n in re.split(r"\s*[–-]\s*", part.strip())]
+            nums.update(range(bounds[0], bounds[-1] + 1) if len(bounds) == 2 else bounds)
+    return nums
 
 
 def _plain(text: str) -> str:
@@ -130,7 +140,7 @@ def _plain(text: str) -> str:
 
 def _used_citations(text: str, refs: list[dict]) -> list[dict]:
     """Referências citadas como [n] na resposta (ou todas, se o modelo não citou nenhuma)."""
-    cited = {int(n) for n in _CITATION_RE.findall(text)}
+    cited = _cited_numbers(text)
     out = []
     for i, r in enumerate(refs, 1):
         if (cited and i not in cited) or (not cited and i > 3):
@@ -188,7 +198,11 @@ def _run_migrations() -> None:
     from alembic.config import Config
 
     cfg = Config(str(Path(__file__).parent / "alembic.ini"))
-    cfg.set_main_option("sqlalchemy.url", config.DATABASE_URL)
+    url = config.DATABASE_URL
+    if url.startswith("postgresql") and "connect_timeout" not in url:
+        # Sem timeout, o startup trava em silêncio se o Postgres estiver fora do ar
+        url += ("&" if "?" in url else "?") + "connect_timeout=10"
+    cfg.set_main_option("sqlalchemy.url", url)
     command.upgrade(cfg, "head")
     setup_logging()  # o alembic reconfigura o logging ao rodar
 

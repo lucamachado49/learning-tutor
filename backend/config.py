@@ -26,7 +26,7 @@ LLM_ORDER = [p.strip() for p in _env("LLM_ORDER", "gemini,groq,ollama").split(",
 LLM_TEMPERATURE = float(_env("LLM_TEMPERATURE", "0.6"))
 
 GEMINI_API_KEY = _env("GEMINI_API_KEY")
-GEMINI_MODEL   = _env("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL   = _env("GEMINI_MODEL", "gemini-flash-latest")  # alias: sempre o Flash atual
 
 GROQ_API_KEY = _env("GROQ_API_KEY")
 GROQ_MODEL   = _env("GROQ_MODEL", "llama-3.3-70b-versatile")

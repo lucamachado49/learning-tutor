@@ -29,7 +29,8 @@ def init_engine(url: str = config.DATABASE_URL) -> Engine:
         # SQLite em memória (testes): uma única conexão compartilhada entre threads
         _engine = create_engine(url, connect_args={"check_same_thread": False}, poolclass=StaticPool)
     else:
-        _engine = create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=10)
+        _engine = create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=10,
+                                connect_args={"connect_timeout": 10})
     _SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
     return _engine
 

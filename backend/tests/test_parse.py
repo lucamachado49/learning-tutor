@@ -53,3 +53,8 @@ def test_used_citations():
     # sem citação explícita: só as 3 mais relevantes, com texto limpo
     cites = _used_citations("sem citação", refs)
     assert [c["n"] for c in cites] == [1, 2, 3] and cites[0]["snippet"] == "t1"
+
+
+def test_grouped_citations():
+    from main import _cited_numbers
+    assert _cited_numbers("ver [2, 6] e [1-3]; também [5] mas não [x] nem [100]") == {1, 2, 3, 5, 6}
