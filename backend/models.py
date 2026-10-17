@@ -40,6 +40,8 @@ class ChatSession(Base):
     mode:       Mapped[str] = mapped_column(String(32), default="conversation")
     # Livros da biblioteca usados como base nesta sessão
     book_ids:   Mapped[list] = mapped_column(JSON, default=list)
+    # Sessão de revisão em andamento: ids dos itens ainda não avaliados
+    review_ids: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
@@ -137,3 +139,47 @@ class Chunk(Base):
     embedding = mapped_column(Vector(config.EMBED_DIM).with_variant(JSON(), "sqlite"), nullable=True)
 
     book: Mapped[Book] = relationship(back_populates="chunks")
+
+
+# --- Revisão espaçada ------------------------------------------------------
+class ReviewItem(Base):
+    """Algo a revisar (erro recorrente, conceito fraco ou som difícil), agendado no estilo SM-2."""
+
+    __tablename__ = "review_items"
+    __table_args__ = (UniqueConstraint("domain", "norm", name="uq_review_domain_norm"),)
+
+    id:            Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    domain:        Mapped[str] = mapped_column(String(32), index=True)
+    kind:          Mapped[str] = mapped_column(String(16))            # mistake | concept | sound
+    label:         Mapped[str] = mapped_column(Text)
+    norm:          Mapped[str] = mapped_column(Text)
+    ease:          Mapped[float] = mapped_column(Float, default=2.5)
+    interval_days: Mapped[float] = mapped_column(Float, default=0.0)
+    reps:          Mapped[int] = mapped_column(Integer, default=0)
+    lapses:        Mapped[int] = mapped_column(Integer, default=0)
+    due_at:        Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    last_reviewed: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at:    Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ReviewLog(Base):
+    __tablename__ = "review_log"
+
+    id:          Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    item_id:     Mapped[str] = mapped_column(ForeignKey("review_items.id", ondelete="CASCADE"), index=True)
+    domain:      Mapped[str] = mapped_column(String(32), index=True)
+    quality:     Mapped[int] = mapped_column(Integer)                  # 0 errou · 1 difícil · 2 acertou
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class MasteryHistory(Base):
+    """Cada atualização do mapa de domínio — base do gráfico de progresso."""
+
+    __tablename__ = "mastery_history"
+
+    id:      Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    domain:  Mapped[str] = mapped_column(String(32), index=True)
+    norm:    Mapped[str] = mapped_column(String(200))
+    concept: Mapped[str] = mapped_column(String(200))
+    score:   Mapped[float] = mapped_column(Float)
+    at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

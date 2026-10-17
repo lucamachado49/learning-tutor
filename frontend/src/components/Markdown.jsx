@@ -8,7 +8,7 @@ import 'katex/dist/katex.min.css'
 
 // Durante o streaming o LLM emite as tags de seção; mostramos só a [MENSAGEM].
 export function visiblePart(text) {
-  let t = text.replace(/^\s*\[MENSAGEM\]\s*/i, '')
+  let t = text.replace(/^\s*\[ME[NS]S?A(?:GEM|JE|GE)\]\s*/i, '')
   const cut = t.search(/\[(FEEDBACK|ERROS)/i)
   return cut >= 0 ? t.slice(0, cut).trimEnd() : t
 }

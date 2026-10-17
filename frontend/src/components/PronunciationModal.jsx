@@ -48,7 +48,11 @@ export default function PronunciationModal() {
     if (!open) return
     setResult(null); setError(null); setOpenWord(null); setDrill(null)
     setReference(options.length === 1 ? options[0] : '')
-    if (isLanguage) api.getDrills(lang).then(setDrills)
+    if (isLanguage) api.getDrills(lang).then(list => {
+      setDrills(list)
+      // Vindo do painel "Hoje": abre direto no exercício do som pedido
+      if (pronunciation?.sound) setDrill(list.find(d => d.sound === pronunciation.sound) ?? null)
+    })
   }, [open, options, lang, isLanguage])
 
   // Avalia assim que a gravação termina

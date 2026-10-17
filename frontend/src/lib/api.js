@@ -253,3 +253,16 @@ export async function assessPronunciation(audioBlob, reference, language) {
   }
   return r.json()
 }
+
+// ── Revisão espaçada e progresso ──────────────────────────
+export async function getReviewToday(domain) {
+  const r = await fetch(`${BASE}/review/today?domain=${encodeURIComponent(domain)}`)
+  if (!r.ok) return null
+  return r.json()
+}
+
+export async function getProgress(domain, days = 30) {
+  const r = await fetch(`${BASE}/progress?domain=${encodeURIComponent(domain)}&days=${days}`)
+  if (!r.ok) return null
+  return r.json()
+}

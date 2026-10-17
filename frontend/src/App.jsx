@@ -6,6 +6,7 @@ import InputBar from './components/InputBar'
 import SettingsModal from './components/SettingsModal'
 import LibraryModal from './components/LibraryModal'
 import PronunciationModal from './components/PronunciationModal'
+import TodayModal from './components/TodayModal'
 import { VoiceProvider } from './hooks/useVoiceMode'
 
 function AppLayout() {
@@ -28,6 +29,7 @@ function AppLayout() {
       <SettingsModal />
       <LibraryModal />
       <PronunciationModal />
+      <TodayModal />
     </div>
   )
 }

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass
 from typing import AsyncGenerator, Optional
 
@@ -131,6 +132,9 @@ class GroqProvider(LLMProvider):
             "temperature": temperature,
             "stream": True,
         }
+        if config.GROQ_MODEL.startswith("openai/gpt-oss"):
+            # Modelos de raciocínio: "low" na conversa (~1 s), "medium" no resto
+            payload["reasoning_effort"] = "low" if fast else "medium"
         headers = {"Authorization": f"Bearer {config.GROQ_API_KEY}"}
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream("POST", self.URL, json=payload, headers=headers) as resp:
@@ -192,6 +196,15 @@ class OllamaProvider(LLMProvider):
             raise ProviderUnavailable("Ollama offline (execute: ollama serve)") from exc
 
 
+# Disjuntor: provedor com cota esgotada (HTTP 429) é pulado por um tempo
+COOLDOWN_SECONDS = 600
+_cooldown_until: dict[str, float] = {}
+
+
+def in_cooldown(name: str) -> bool:
+    return time.monotonic() < _cooldown_until.get(name, 0.0)
+
+
 PROVIDERS: dict[str, LLMProvider] = {
     p.name: p for p in (GeminiProvider(), GroqProvider(), OllamaProvider())
 }
@@ -224,6 +237,9 @@ async def stream_chat(
         if not prov.configured():
             errors.append(f"{prov.label}: sem chave no .env")
             continue
+        if in_cooldown(name):
+            errors.append(f"{prov.label}: cota esgotada (pausado por alguns minutos)")
+            continue
 
         started = False
         try:
@@ -238,8 +254,12 @@ async def stream_chat(
                 # Falha no meio da resposta: não dá para trocar de provedor.
                 yield StreamEvent(prov.name, f"\n\n[ERRO: {exc}]")
                 return
-            log.warning("LLM %s indisponível: %s", prov.name, exc)
-            errors.append(f"{prov.label}: {exc}")
+            detail = str(exc) or type(exc).__name__   # ex.: ReadTimeout não tem mensagem
+            if "HTTP 429" in detail:
+                _cooldown_until[name] = time.monotonic() + COOLDOWN_SECONDS
+                detail = "cota esgotada (HTTP 429) — pausado por 10 min"
+            log.warning("LLM %s indisponível: %s", prov.name, detail)
+            errors.append(f"{prov.label}: {detail}")
 
     raise ProviderUnavailable("Nenhum LLM disponível. " + " | ".join(errors))
 
@@ -249,7 +269,8 @@ async def complete(
     provider: str = "auto",
     ollama_model: Optional[str] = None,
     temperature: float = 0.1,
+    fast: bool = False,
 ) -> str:
     """Resposta completa (sem streaming) — para tarefas auxiliares curtas."""
-    parts = [ev.token async for ev in stream_chat(messages, provider, ollama_model, temperature)]
+    parts = [ev.token async for ev in stream_chat(messages, provider, ollama_model, temperature, fast)]
     return "".join(parts)

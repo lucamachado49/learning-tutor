@@ -36,8 +36,8 @@ Se não houver nada relevante, escreva apenas "- nenhum".>
 
 [DOMINIO]
 <Opcional. Só quando o aluno RESPONDEU um exercício ou pergunta: avalie cada conceito
-envolvido, um por linha, no formato "- nome curto do conceito: nota de 0 a 100".
-Ex.: "- regra da cadeia: 60". Caso contrário, escreva apenas "- nenhum".>"""
+envolvido, um por linha, no formato "- <nome curto do conceito>: <nota de 0 a 100>".
+Use conceitos DESTA conversa. Caso contrário, escreva apenas "- nenhum".>"""
 
 # Instruções extras das ações rápidas da interface
 ACTIONS = {
@@ -59,6 +59,10 @@ texto) que CALCULAM a resposta. O sistema executa e usa o resultado como gabarit
 
 [VERIFICACAO]
 <expressões que calculam a resposta DESTE exercício, ex.: "M = Matrix([[...]])" e "M.det()">""",
+    "review": """AÇÃO: SESSÃO DE REVISÃO.
+Comece pelo primeiro item da lista abaixo. Para cada item, crie UMA pergunta ou exercício curto que
+teste exatamente aquele ponto (sem dar a resposta). Depois de cada resposta do aluno, corrija
+brevemente e passe ao próximo item.""",
     "diagnosis": """AÇÃO: DIAGNÓSTICO.
 Analise o MAPA DE DOMÍNIO e a MEMÓRIA DO ALUNO e explique, de forma objetiva: pontos fortes,
 lacunas prioritárias (com o porquê), e um plano curto de próximos passos com seções dos livros

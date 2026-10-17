@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import config
+import review
 from models import ChatSession, ConceptMastery, Message, Mistake, utcnow
 
 _engine: Optional[Engine] = None
@@ -68,6 +69,7 @@ def _session_dict(cs: ChatSession) -> dict:
         "id": cs.id, "title": cs.title, "domain": cs.domain,
         "language": cs.domain,  # compatibilidade com o frontend antigo
         "level": cs.level, "mode": cs.mode, "book_ids": cs.book_ids or [],
+        "review_ids": cs.review_ids or [],
         "created_at": _iso(cs.created_at), "updated_at": _iso(cs.updated_at),
     }
 
@@ -176,6 +178,7 @@ def record_mistakes(domain: str, items: list[str]) -> None:
             else:
                 s.add(Mistake(domain=domain, text=text, norm=norm, first_seen=now, last_seen=now))
                 s.flush()
+                review.on_new_mistake(s, domain, text)
 
 
 def top_mistakes(domain: str, limit: int = 10) -> list[dict]:
@@ -209,9 +212,11 @@ def record_mastery(domain: str, scores: list[tuple[str, float]]) -> None:
                 row.attempts += 1
                 row.updated_at = now
             else:
-                s.add(ConceptMastery(domain=domain, concept=concept[:200], norm=norm,
-                                     score=score, attempts=1, updated_at=now))
+                row = ConceptMastery(domain=domain, concept=concept[:200], norm=norm,
+                                     score=score, attempts=1, updated_at=now)
+                s.add(row)
                 s.flush()
+            review.on_mastery_update(s, domain, row.concept, norm, row.score)
 
 
 def get_mastery(domain: str, limit: int = 50) -> list[dict]:
@@ -228,3 +233,48 @@ def get_mastery(domain: str, limit: int = 50) -> list[dict]:
 def delete_mastery(item_id: str) -> None:
     with session_scope() as s:
         s.execute(delete(ConceptMastery).where(ConceptMastery.id == item_id))
+
+
+# --- Revisão espaçada ------------------------------------------------------
+def due_review_ids(domain: str, kinds: tuple = ("mistake", "concept"), limit: int = 5) -> list[str]:
+    from models import ReviewItem
+    with session_scope() as s:
+        review.sync_existing(s, domain)
+        end = utcnow().replace(hour=23, minute=59, second=59)
+        return list(s.scalars(
+            select(ReviewItem.id).where(ReviewItem.domain == domain, ReviewItem.kind.in_(kinds),
+                                        ReviewItem.due_at <= end)
+            .order_by(ReviewItem.due_at).limit(limit)
+        ))
+
+
+def review_today(domain: str) -> dict:
+    with session_scope() as s:
+        return review.today(s, domain)
+
+
+def review_progress(domain: str, days: int = 30) -> dict:
+    with session_scope() as s:
+        return review.progress(s, domain, days)
+
+
+def grade_review(item_id: str, quality: int) -> bool:
+    from models import ReviewItem
+    with session_scope() as s:
+        item = s.get(ReviewItem, item_id)
+        if item is None:
+            return False
+        review.grade_item(s, item, quality)
+        return True
+
+
+def grade_review_by_label(domain: str, label: str, quality: int) -> bool:
+    with session_scope() as s:
+        return review.grade_by_label(s, domain, label, quality)
+
+
+def review_items_by_ids(ids: list[str]) -> list[dict]:
+    from models import ReviewItem
+    with session_scope() as s:
+        rows = [s.get(ReviewItem, i) for i in ids]
+        return [review._item_dict(r) for r in rows if r]

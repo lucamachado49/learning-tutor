@@ -100,7 +100,8 @@ def _warm_whisper() -> None:
 # ---------------------------------------------------------------------------
 # Parse da resposta do LLM
 # ---------------------------------------------------------------------------
-_SECTION = r"\[{}\]\s*(.*?)(?=\[(?:MENSAGEM|FEEDBACK[^\]]*|ERROS|DOM[IÍ]NIO|VERIFICA[CÇ][AÃ]O)\]|$)"
+_MSG_TAG = r"ME[NS]S?A(?:GEM|JE|GE)"
+_SECTION = r"\[{}\]\s*(.*?)(?=\[(?:ME[NS]S?A(?:GEM|JE|GE)|FEEDBACK[^\]]*|ERROS|DOM[IÍ]NIO|VERIFICA[CÇ][AÃ]O|REVIS[AÃ]O)\]|$)"
 
 
 def _section(name: str, text: str) -> Optional[str]:
@@ -110,11 +111,14 @@ def _section(name: str, text: str) -> Optional[str]:
 
 def _parse_response(full_text: str) -> tuple[str, str, list[str]]:
     """Extrai [MENSAGEM], [FEEDBACK PEDAGÓGICO] e a lista de [ERROS]."""
-    message = _section("MENSAGEM", full_text)
+    message = _section(_MSG_TAG, full_text)
     feedback = _section(r"FEEDBACK[^]]*", full_text) or ""
     errors_txt = _section("ERROS", full_text) or ""
     if message is None:
-        message = re.split(r"\[(?:FEEDBACK|ERROS|DOM[IÍ]NIO|VERIFICA)", full_text, flags=re.IGNORECASE)[0].strip()
+        message = re.split(r"\[(?:FEEDBACK|ERROS|DOM[IÍ]NIO|VERIFICA|REVIS)", full_text, flags=re.IGNORECASE)[0].strip()
+    if not message and feedback:
+        # O modelo pulou a [MENSAGEM] e escreveu tudo no feedback: mostra o feedback como resposta
+        message, feedback = feedback, ""
 
     errors = []
     for line in errors_txt.splitlines():
@@ -133,12 +137,61 @@ def _parse_mastery(full_text: str) -> list[tuple[str, float]]:
     scores = []
     for line in block.splitlines():
         m = re.match(r"^\s*[-•*]\s*(.+?)\s*[:=]\s*(\d{1,3})(?:\s*/\s*100)?\s*$", line)
-        if m and m.group(1).lower() not in {"nenhum", "none"}:
+        if m and m.group(1).lower() not in {"nenhum", "none"} and not m.group(1).startswith("<"):
             scores.append((m.group(1).strip()[:200], float(m.group(2))))
     return scores
 
 
 # Citações como [3], [2, 6] ou [1-3]
+_REVIEW_LINE = re.compile(r"^\s*[-•*]?\s*R(\d{1,2})\s*[:=–-]\s*(acertou|dif[ií]cil|errou)", re.IGNORECASE)
+_REVIEW_QUALITY = {"acertou": 2, "difícil": 1, "dificil": 1, "errou": 0}
+
+
+def _parse_review(full_text: str) -> dict[int, int]:
+    """[REVISAO] → {número do item (1..n): qualidade}."""
+    block = _section("REVIS[AÃ]O", full_text) or ""
+    out = {}
+    for line in block.splitlines():
+        m = _REVIEW_LINE.match(line)
+        if m:
+            out[int(m.group(1))] = _REVIEW_QUALITY[m.group(2).lower()]
+    return out
+
+
+_JUDGE_PROMPT = """Você avalia uma sessão de revisão de um aluno. Abaixo estão os ITENS que estão
+sendo revisados (erros que ele costumava cometer ou conceitos fracos) e a MENSAGEM do aluno.
+Para cada item, decida se a mensagem mostra esse ponto:
+- "acertou": usou/explicou corretamente
+- "dificil": acertou em parte ou com hesitação
+- "errou": cometeu o erro de novo
+- "ausente": a mensagem não envolve esse item
+Responda SOMENTE com JSON, ex.: {"R1": "errou", "R2": "ausente"}"""
+
+_JUDGE_QUALITY = {"acertou": 2, "dificil": 1, "difícil": 1, "errou": 0}
+
+
+async def _judge_review(items: list[dict], student_msg: str, req: "ChatRequest") -> dict[int, int]:
+    """Avalia os itens pendentes numa chamada curta e separada (mais confiável que a seção oculta)."""
+    listing = "\n".join(f"R{i}: {it['label']}" for i, it in enumerate(items, 1))
+    try:
+        raw = await llm.complete(
+            [{"role": "system", "content": _JUDGE_PROMPT},
+             {"role": "user", "content": f"ITENS:\n{listing}\n\nMENSAGEM DO ALUNO:\n{student_msg}"}],
+            req.provider, req.ollama_model, fast=True,
+        )
+        data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
+    except Exception as exc:
+        log.warning("Avaliação da revisão falhou: %s", exc)
+        return {}
+    out = {}
+    for key, verdict in data.items():
+        m = re.match(r"R(\d+)$", str(key).strip())
+        q = _JUDGE_QUALITY.get(str(verdict).strip().lower())
+        if m and q is not None:
+            out[int(m.group(1))] = q
+    return out
+
+
 _CITATION_RE = re.compile(r"\[(\d{1,2}(?:\s*[,–-]\s*\d{1,2})*)\]")
 
 
@@ -249,8 +302,10 @@ async def health():
         ollama_models = [m for m in ollama_models
                          if not m.startswith(config.EMBED_MODEL) and "embed" not in m]
     providers = {
-        "gemini": {"available": llm.PROVIDERS["gemini"].configured(), "model": config.GEMINI_MODEL},
-        "groq":   {"available": llm.PROVIDERS["groq"].configured(),   "model": config.GROQ_MODEL},
+        "gemini": {"available": llm.PROVIDERS["gemini"].configured() and not llm.in_cooldown("gemini"),
+                   "model": config.GEMINI_MODEL, "cooldown": llm.in_cooldown("gemini")},
+        "groq":   {"available": llm.PROVIDERS["groq"].configured() and not llm.in_cooldown("groq"),
+                   "model": config.GROQ_MODEL, "cooldown": llm.in_cooldown("groq")},
         "ollama": {"available": ollama_models is not None, "model": config.OLLAMA_MODEL},
     }
     return {
@@ -356,7 +411,25 @@ async def chat_stream(req: ChatRequest):
             log.warning("Busca na biblioteca falhou: %s", exc)
     outline = library.toc_outline(book_ids) if action == "roadmap" and book_ids else ""
 
+    if action == "review":
+        db.update_session(req.session_id, review_ids=db.due_review_ids(domain.id))
+        session = db.get_session(req.session_id)
+    review_items = db.review_items_by_ids(session.get("review_ids") or [])
+
     system = domain.system_prompt(level, mode, memory, mastery, references, outline, action)
+    if review_items:
+        lines = "\n".join(f"R{i}: [{it['kind']}] {it['label']}" for i, it in enumerate(review_items, 1))
+        system += (
+            "\n\nSESSÃO DE REVISÃO EM ANDAMENTO — itens pendentes (revise na ordem):\n" + lines +
+            "\nQuando o aluno RESPONDER sobre um item, avalie-o adicionando AO FINAL a seção oculta:\n"
+            "[REVISAO]\n- R<n>: acertou | difícil | errou\n"
+            "OBRIGATÓRIO: sempre que a resposta do aluno mostrar (certo ou errado) algum desses "
+            "itens — mesmo de passagem —, inclua a seção [REVISAO] com a avaliação. Avalie só "
+            "itens que aparecem nesta mensagem do aluno. Quando todos forem avaliados, "
+            "parabenize e encerre a revisão."
+        )
+    elif action == "review":
+        system += "\n\nNão há itens para revisar hoje: diga isso e sugira um exercício ou conversa."
     answer_key = db.last_answer_key(req.session_id) if not action else ""
     if answer_key:
         system += (
@@ -383,8 +456,9 @@ async def chat_stream(req: ChatRequest):
     async def _generate() -> AsyncGenerator[str, None]:
         full_text, provider = "", ""
         try:
-            async for ev in llm.stream_chat(api_messages, req.provider, req.ollama_model,
-                                            fast=req.fast and not action):
+            # Revisão: perguntas curtas, latência importa mais que raciocínio longo
+            fast = (req.fast and not action) or action == "review" or bool(review_items)
+            async for ev in llm.stream_chat(api_messages, req.provider, req.ollama_model, fast=fast):
                 full_text += ev.token
                 provider = ev.provider
                 yield f"data: {json.dumps({'token': ev.token, 'done': False, 'provider': provider})}\n\n"
@@ -402,6 +476,17 @@ async def chat_stream(req: ChatRequest):
             scores = _parse_mastery(full_text)
             if scores:
                 db.record_mastery(domain.id, scores)
+            graded = _parse_review(full_text)
+            if review_items and not graded and action != "review":
+                graded = await _judge_review(review_items, req.message, req)
+            if graded and review_items:
+                done = set()
+                for n, quality in graded.items():
+                    if 1 <= n <= len(review_items):
+                        db.grade_review(review_items[n - 1]["id"], quality)
+                        done.add(review_items[n - 1]["id"])
+                remaining = [it["id"] for it in review_items if it["id"] not in done]
+                db.update_session(req.session_id, review_ids=remaining)
 
             final = {
                 "token": "", "done": True, "provider": provider,
@@ -467,6 +552,32 @@ async def _answer_key(full_text: str, exercise: str, req: "ChatRequest") -> str:
                 {"role": "user", "content": f"Erro: {exc}. Corrija e responda só com o código."},
             ]
     return ""
+
+
+# ---------------------------------------------------------------------------
+# Revisão espaçada e progresso
+# ---------------------------------------------------------------------------
+class ReviewGrade(BaseModel):
+    quality: int  # 0 errou · 1 difícil · 2 acertou
+
+
+@app.get("/api/review/today")
+def review_today(domain: str = DEFAULT_DOMAIN):
+    return db.review_today(get_domain(domain).id)
+
+
+@app.post("/api/review/{item_id}/grade")
+def review_grade(item_id: str, body: ReviewGrade):
+    if body.quality not in (0, 1, 2):
+        raise HTTPException(status_code=400, detail="quality deve ser 0, 1 ou 2.")
+    if not db.grade_review(item_id, body.quality):
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    return {"ok": True}
+
+
+@app.get("/api/progress")
+def progress(domain: str = DEFAULT_DOMAIN, days: int = 30):
+    return db.review_progress(get_domain(domain).id, max(7, min(days, 180)))
 
 
 @app.get("/api/memory/{domain_id}")
@@ -626,6 +737,8 @@ async def assess_pronunciation(
     weak = set(result["weak_sounds"])
     if assessed:
         db.record_mastery(domain.id, [(f"pronúncia /{s}/", 0.0 if s in weak else 100.0) for s in sorted(assessed)])
+        for s in sorted(assessed):
+            db.grade_review_by_label(domain.id, f"pronúncia /{s}/", 0 if s in weak else 2)
     return result
 
 

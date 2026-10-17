@@ -52,3 +52,13 @@ async def test_fast_mode_uses_voice_order(fake_llm, monkeypatch):
     monkeypatch.setattr(llm.config, "VOICE_LLM_ORDER", ["b", "a"])
     assert [e.token for e in await _collect(fast=True)] == ["rápido"]
     assert [e.token for e in await _collect()] == ["lento"]
+
+
+async def test_quota_exhausted_provider_is_paused(fake_llm, monkeypatch):
+    monkeypatch.setattr(llm, "_cooldown_until", {})
+    a = FakeProvider("a", error=llm.ProviderUnavailable("A HTTP 429: quota"))
+    b = FakeProvider("b", tokens=["ok"])
+    fake_llm(a, b)
+    assert [e.token for e in await _collect()] == ["ok"]
+    assert [e.token for e in await _collect()] == ["ok"]
+    assert a.calls == 1          # na 2ª mensagem o provedor sem cota nem foi tentado

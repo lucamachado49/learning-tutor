@@ -94,9 +94,9 @@ copy .env.example .env               # depois preencha as chaves
 
 No `.env`, adicione chaves gratuitas (opcional, mas recomendado para domínios técnicos):
 - `GEMINI_API_KEY` — https://aistudio.google.com/apikey
-- `GROQ_API_KEY` — https://console.groq.com/keys
+- `GROQ_API_KEY` — https://console.groq.com/keys (modelo padrão `openai/gpt-oss-120b`, ~1 s)
 
-Sem chaves, o app usa o Ollama local. No modo "Automático" a ordem é Gemini → Groq → Ollama.
+Sem chaves, o app usa o Ollama local. No modo "Automático" a ordem é Gemini → Groq → Ollama (na voz e nas revisões: Groq primeiro). Provedor com cota esgotada (HTTP 429) é pulado por 10 min. Os modelos padrão usam aliases/versões vigentes; se um provedor descontinuar um modelo, ajuste `GEMINI_MODEL` / `GROQ_MODEL` no `.env`.
 
 ### Domínios e modos
 Inglês · Espanhol (níveis CEFR) · Matemática p/ ML · ML Engineering · CTO Skills.
@@ -190,6 +190,21 @@ O espanhol ainda não foi validado assim: as vozes sintéticas não vibram o "rr
 > Use a versão cu128: ela traz o cuDNN 9.7, compatível com o Whisper no mesmo processo
 > (versões com cuDNN mais antigo derrubam o Whisper — ver `backend/cuda_setup.py`).
 
+### 📅 Hoje: revisão espaçada e progresso
+
+O botão **Hoje** (barra lateral, com o número de itens vencidos) reúne o que revisar no dia:
+
+- **Itens criados sozinhos**: cada erro novo que o tutor anota, cada conceito com nota < 80 no
+  mapa de domínio e cada som de pronúncia fraco viram um item de revisão.
+- **Agendamento espaçado (SM-2)**: acertou → o intervalo cresce (1 → 3 → ~8 → ~20 dias…);
+  errou → volta amanhã. Itens fáceis somem da frente; os difíceis aparecem até você dominar.
+- **Revisar com o tutor**: uma sessão com até 5 itens vencidos. O tutor cria perguntas que
+  obrigam a usar cada ponto, sem anunciar qual é; um avaliador separado (chamada curta, em JSON)
+  julga cada resposta como acertou / difícil / errou e reagenda o item.
+- **Sons para treinar**: abre direto o exercício de pronúncia daquele som; a nota reagenda o item.
+- **Progresso (30 dias)**: domínio médio e revisões por dia (com versão em tabela), sequência de
+  dias estudando e os pontos mais fracos.
+
 ### Migrando conversas antigas (SQLite → PostgreSQL)
 ```powershell
 .venv\Scripts\python.exe backend\scripts\migrate_sqlite.py backend\tutor.db.bak
@@ -241,6 +256,7 @@ language/
 │   ├── verifier.py         # Gabaritos SymPy em sandbox
 │   ├── pronunciation.py    # Avaliação de pronúncia por fonemas (wav2vec2 + GOP)
 │   ├── drills.py           # Exercícios de sons difíceis para brasileiros
+│   ├── review.py           # Revisão espaçada (SM-2) e progresso
 │   ├── tts.py              # Kokoro / Piper
 │   └── tests/              # pytest
 ├── frontend/               # Interface React (Vite)

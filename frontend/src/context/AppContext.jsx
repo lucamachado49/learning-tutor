@@ -50,6 +50,9 @@ export function AppProvider({ children }) {
   const [libraryOpen, setLibraryOpen]   = useState(false)
   // Treino de pronúncia: null (fechado) ou { text } com a frase de origem (pode ser vazia)
   const [pronunciation, setPronunciation] = useState(null)
+  // Painel "Hoje" (revisão espaçada) e contador de itens vencidos
+  const [todayOpen, setTodayOpen] = useState(false)
+  const [dueCount, setDueCount]   = useState(0)
   const [isStreaming, setIsStreaming]   = useState(false)
 
   // Configurações
@@ -192,6 +195,17 @@ export function AppProvider({ children }) {
     }
   }, [currentSession])
 
+  // ── Itens de revisão vencidos (badge do botão "Hoje") ─────
+  const refreshToday = useCallback(() => {
+    api.getReviewToday(settingsRef.current.language)
+      .then(t => setDueCount(t?.total_due ?? 0))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => { if (backendOnline) refreshToday() }, [backendOnline, settings.language, refreshToday])
+  // Uma resposta do tutor pode criar/avaliar itens: atualiza o contador ao fim do streaming
+  useEffect(() => { if (!isStreaming && backendOnline) refreshToday() }, [isStreaming, backendOnline, refreshToday])
+
   // ── Livros usados como base (sessão atual + próximas) ─────
   const setBookIds = useCallback(async (bookIds) => {
     setSettings(s => ({ ...s, bookIds }))
@@ -224,6 +238,7 @@ export function AppProvider({ children }) {
       settingsOpen, setSettingsOpen,
       libraryOpen, setLibraryOpen,
       pronunciation, setPronunciation,
+      todayOpen, setTodayOpen, dueCount, refreshToday,
       isStreaming, setIsStreaming,
       // config
       settings, setSettings, setBookIds,

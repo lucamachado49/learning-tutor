@@ -49,3 +49,49 @@ def test_chat_stream_persists_and_records_memory(client, fake_llm):
 def test_chat_unknown_session_404(client):
     r = client.post("/api/chat/stream", json={"session_id": "nope", "message": "oi"})
     assert r.status_code == 404
+
+
+def test_review_session_grades_and_reschedules(client, fake_llm):
+    import review as rv
+    with db.session_scope() as s:
+        for t in ["usa 'go' no passado", "esquece o 'the'"]:
+            s.add(rv.Mistake(domain="en", text=t, norm=t, first_seen=rv.utcnow(), last_seen=rv.utcnow()))
+    sid = client.post("/api/sessions", json={"domain": "en"}).json()["id"]
+
+    # 1) Inicia a revisão: os 2 erros antigos viram itens vencidos e entram na sessão
+    fake_llm(FakeProvider("fake", tokens=["[MENSAGEM]\nTranslate: 'Eu fui à praia ontem.'"]))
+    client.post("/api/chat/stream", json={"session_id": sid, "message": "Revisar", "action": "review"})
+    assert len(db.get_session(sid)["review_ids"]) == 2
+    assert client.get("/api/review/today?domain=en").json()["total_due"] == 2
+
+    # 2) Aluno responde; tutor avalia R1 como acerto
+    fake_llm(FakeProvider("fake", tokens=["[MENSAGEM]\nCorreto!\n[REVISAO]\n- R1: acertou"]))
+    client.post("/api/chat/stream", json={"session_id": sid, "message": "I went to the beach yesterday."})
+    assert len(db.get_session(sid)["review_ids"]) == 1
+    today = client.get("/api/review/today?domain=en").json()
+    assert today["total_due"] == 1 and today["done_today"] == 1 and today["streak"] == 1
+
+    prog = client.get("/api/progress?domain=en&days=7").json()
+    assert prog["series"][-1]["reviews"] == 1 and prog["series"][-1]["correct"] == 1
+
+
+def test_review_judge_grades_when_tutor_forgets(client, fake_llm):
+    import review as rv
+
+    class SmartFake(FakeProvider):
+        async def stream(self, messages, temperature, fast=False):
+            if "Você avalia uma sessão de revisão" in messages[0]["content"]:
+                yield '{"R1": "acertou", "R2": "ausente"}'
+            else:
+                yield "[MENSAGEM]\nNice! What else did you do?"
+
+    with db.session_scope() as s:
+        for t in ["usa 'go' no passado", "esquece o 'the'"]:
+            s.add(rv.Mistake(domain="en", text=t, norm=t, first_seen=rv.utcnow(), last_seen=rv.utcnow()))
+    fake_llm(SmartFake("fake"))
+    sid = client.post("/api/sessions", json={"domain": "en"}).json()["id"]
+    client.post("/api/chat/stream", json={"session_id": sid, "message": "Revisar", "action": "review"})
+    client.post("/api/chat/stream", json={"session_id": sid, "message": "I went to the park."})
+
+    assert len(db.get_session(sid)["review_ids"]) == 1          # R1 avaliado, R2 segue pendente
+    assert client.get("/api/review/today?domain=en").json()["done_today"] == 1

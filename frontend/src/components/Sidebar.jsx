@@ -1,6 +1,6 @@
 // src/components/Sidebar.jsx
 import { useState } from 'react'
-import { MessageSquarePlus, Settings, Trash2, ChevronLeft, ChevronRight, Bot, Circle, Library } from 'lucide-react'
+import { MessageSquarePlus, Settings, Trash2, ChevronLeft, ChevronRight, Bot, Circle, Library, CalendarCheck } from 'lucide-react'
 import { LANGUAGES, useApp } from '../context/AppContext'
 
 function formatDate(iso) {
@@ -18,7 +18,7 @@ export default function Sidebar() {
     sessions, currentSession, isStreaming,
     createSession, selectSession, removeSession,
     sidebarOpen, setSidebarOpen,
-    setSettingsOpen, setLibraryOpen,
+    setSettingsOpen, setLibraryOpen, setTodayOpen, dueCount,
     settings, health, backendOnline,
   } = useApp()
 
@@ -161,6 +161,23 @@ export default function Sidebar() {
                 }
               </span>
             </div>
+
+            <button
+              onClick={() => setTodayOpen(true)}
+              className="
+                w-full flex items-center gap-2 px-3 py-2.5 rounded-xl
+                text-sm text-neutral-600 hover:bg-white hover:text-neutral-900
+                transition-colors
+              "
+            >
+              <CalendarCheck className="w-4 h-4" />
+              Hoje
+              {dueCount > 0 && (
+                <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-violet-500 text-white text-[11px] font-medium flex items-center justify-center">
+                  {dueCount}
+                </span>
+              )}
+            </button>
 
             <button
               onClick={() => setLibraryOpen(true)}

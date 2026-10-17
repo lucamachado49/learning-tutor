@@ -58,3 +58,14 @@ def test_used_citations():
 def test_grouped_citations():
     from main import _cited_numbers
     assert _cited_numbers("ver [2, 6] e [1-3]; também [5] mas não [x] nem [100]") == {1, 2, 3, 5, 6}
+
+
+def test_message_falls_back_to_feedback_when_missing():
+    msg, fb, _ = _parse_response("[FEEDBACK PEDAGÓGICO]\nUse 'went'. Where did you go next?\n[REVISAO]\n- R1: errou")
+    assert msg.startswith("Use 'went'") and fb == ""
+
+
+def test_message_tag_spelling_variants():
+    for tag in ("MENSAGEM", "MESSAGEM", "MENSAJE", "MESSAGE"):
+        msg, fb, _ = _parse_response(f"[{tag}]\nHi!\n[FEEDBACK PEDAGÓGICO]\nOk")
+        assert (msg, fb) == ("Hi!", "Ok"), tag
