@@ -123,7 +123,7 @@ Abra `http://localhost:5173` 🎉
 
 ### Migrando conversas antigas (SQLite → PostgreSQL)
 ```powershell
-.venv\Scripts\python.exe backend\scripts\migrate_sqlite.py backend	utor.db.bak
+.venv\Scripts\python.exe backend\scripts\migrate_sqlite.py backend\tutor.db.bak
 ```
 
 ### Testes
