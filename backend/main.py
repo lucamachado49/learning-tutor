@@ -36,8 +36,9 @@ import db
 import llm
 import tts
 from domains import DEFAULT_DOMAIN, DOMAINS, MODES, get_domain
+from logging_setup import setup_logging
 
-logging.basicConfig(level=logging.INFO)
+setup_logging()
 log = logging.getLogger("tutor")
 
 try:
@@ -128,9 +129,21 @@ class ChatRequest(BaseModel):
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db.init_db()
+    _run_migrations()
+    db.init_engine()
     _get_whisper()
     yield
+
+
+def _run_migrations() -> None:
+    """Aplica migrações pendentes do Alembic (idempotente)."""
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(Path(__file__).parent / "alembic.ini"))
+    cfg.set_main_option("sqlalchemy.url", config.DATABASE_URL)
+    command.upgrade(cfg, "head")
+    setup_logging()  # o alembic reconfigura o logging ao rodar
 
 
 app = FastAPI(title="Learning Tutor API", version="3.0.0", lifespan=lifespan)
@@ -162,6 +175,7 @@ async def health():
         "models": ollama_models or [],
         "whisper": WHISPER_AVAILABLE,
         "tts": tts.status(),
+        "database": await asyncio.to_thread(db.ping),
     }
 
 
@@ -175,12 +189,12 @@ async def list_domains():
 
 
 @app.get("/api/sessions")
-async def list_sessions():
+def list_sessions():
     return db.list_sessions()
 
 
 @app.post("/api/sessions", status_code=201)
-async def create_session(body: SessionCreate):
+def create_session(body: SessionCreate):
     domain = get_domain(body.domain)
     level = body.level if body.level in domain.levels else domain.default_level
     mode = body.mode if body.mode in MODES else "conversation"
@@ -188,12 +202,12 @@ async def create_session(body: SessionCreate):
 
 
 @app.get("/api/sessions/{session_id}/messages")
-async def get_messages(session_id: str):
+def get_messages(session_id: str):
     return db.get_messages(session_id)
 
 
 @app.delete("/api/sessions/{session_id}")
-async def delete_session(session_id: str):
+def delete_session(session_id: str):
     db.delete_session(session_id)
     return {"ok": True}
 
@@ -210,7 +224,7 @@ async def chat_stream(req: ChatRequest):
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
 
     # Idioma/nível/modo podem mudar no meio da sessão; persistimos o último usado.
-    domain = get_domain(req.domain or session.get("domain") or session["language"])
+    domain = get_domain(req.domain or session["domain"])
     level = req.level if req.level in domain.levels else (
         session["level"] if session["level"] in domain.levels else domain.default_level
     )
@@ -242,7 +256,7 @@ async def chat_stream(req: ChatRequest):
                 yield f"data: {json.dumps({'token': ev.token, 'done': False, 'provider': provider})}\n\n"
 
             message, feedback, errors = _parse_response(full_text)
-            asst_id = db.add_message(req.session_id, "assistant", message, feedback)
+            asst_id = db.add_message(req.session_id, "assistant", message, feedback, provider)
             db.update_session(req.session_id)
             if errors:
                 db.record_mistakes(domain.id, errors)
@@ -265,12 +279,12 @@ async def chat_stream(req: ChatRequest):
 
 
 @app.get("/api/memory/{domain_id}")
-async def get_memory(domain_id: str):
+def get_memory(domain_id: str):
     return db.top_mistakes(domain_id, limit=50)
 
 
 @app.delete("/api/memory/item/{mistake_id}")
-async def delete_memory_item(mistake_id: str):
+def delete_memory_item(mistake_id: str):
     db.delete_mistake(mistake_id)
     return {"ok": True}
 

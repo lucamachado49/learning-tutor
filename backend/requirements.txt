@@ -1,22 +1,26 @@
 # ============================================================
-# Language Tutor — FastAPI Backend
+# Learning Tutor — FastAPI Backend
 # ============================================================
 
 # --- Web Framework ---
 fastapi>=0.111.0
 uvicorn[standard]>=0.30.0
 python-multipart>=0.0.9
-
-# --- HTTP Client (async, para Ollama) ---
-httpx>=0.27.0
-
-# --- Validação de dados ---
 pydantic>=2.7.0
 
-# --- Speech-to-Text (Offline) ---
+# --- HTTP Client (LLMs) ---
+httpx>=0.27.0
+
+# --- Banco ---
+sqlalchemy>=2.0
+alembic>=1.13
+psycopg[binary]>=3.2
+pgvector>=0.3
+
+# --- Speech-to-Text ---
 faster-whisper>=1.0.3
 
-# --- Text-to-Speech (Offline - Piper TTS) ---
+# --- Text-to-Speech ---
 kokoro-onnx>=0.4.0
 piper-tts>=1.3.0
 

@@ -1,134 +1,145 @@
 """
-db.py — Persistência SQLite: sessões, mensagens e memória do aluno.
+db.py — Camada de acesso a dados: sessões, mensagens e memória do aluno.
+
+As funções retornam dicts prontos para JSON, isolando o ORM do resto da API.
 """
 
 from __future__ import annotations
 
-import sqlite3
-import uuid
-from datetime import datetime, timezone
-from threading import Lock
+from contextlib import contextmanager
+from datetime import datetime
+from typing import Iterator, Optional
+
+from sqlalchemy import create_engine, delete, func, select
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 import config
+from models import ChatSession, Message, Mistake, utcnow
 
-_lock = Lock()
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+_engine: Optional[Engine] = None
+_SessionLocal: Optional[sessionmaker] = None
 
 
-def _conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(config.DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+def init_engine(url: str = config.DATABASE_URL) -> Engine:
+    """Cria o engine (chamado no startup; os testes passam uma URL SQLite)."""
+    global _engine, _SessionLocal
+    if url.startswith("sqlite"):
+        # SQLite em memória (testes): uma única conexão compartilhada entre threads
+        _engine = create_engine(url, connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    else:
+        _engine = create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=10)
+    _SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
+    return _engine
 
 
-def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+@contextmanager
+def session_scope() -> Iterator[Session]:
+    if _SessionLocal is None:
+        init_engine()
+    s = _SessionLocal()  # type: ignore[misc]
+    try:
+        yield s
+        s.commit()
+    except Exception:
+        s.rollback()
+        raise
+    finally:
+        s.close()
 
 
-def init_db() -> None:
-    with _lock, _conn() as conn:
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS sessions (
-                id         TEXT PRIMARY KEY,
-                title      TEXT NOT NULL DEFAULT 'Nova Conversa',
-                language   TEXT NOT NULL DEFAULT 'en',
-                level      TEXT NOT NULL DEFAULT 'B1',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS messages (
-                id         TEXT PRIMARY KEY,
-                session_id TEXT NOT NULL,
-                role       TEXT NOT NULL,
-                content    TEXT NOT NULL,
-                feedback   TEXT DEFAULT '',
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-            );
-            CREATE TABLE IF NOT EXISTS mistakes (
-                id         TEXT PRIMARY KEY,
-                domain     TEXT NOT NULL,
-                text       TEXT NOT NULL,
-                norm       TEXT NOT NULL,
-                count      INTEGER NOT NULL DEFAULT 1,
-                first_seen TEXT NOT NULL,
-                last_seen  TEXT NOT NULL,
-                UNIQUE (domain, norm)
-            );
-        """)
-        # Migração: sessões antigas usavam só "language"
-        cols = _columns(conn, "sessions")
-        if "domain" not in cols:
-            conn.execute("ALTER TABLE sessions ADD COLUMN domain TEXT")
-            conn.execute("UPDATE sessions SET domain = language")
-        if "mode" not in cols:
-            conn.execute("ALTER TABLE sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'conversation'")
-        conn.commit()
+def ping() -> bool:
+    try:
+        with session_scope() as s:
+            s.execute(select(1))
+        return True
+    except Exception:
+        return False
+
+
+def _iso(dt: datetime) -> str:
+    return dt.isoformat()
+
+
+def _session_dict(cs: ChatSession) -> dict:
+    return {
+        "id": cs.id, "title": cs.title, "domain": cs.domain,
+        "language": cs.domain,  # compatibilidade com o frontend antigo
+        "level": cs.level, "mode": cs.mode,
+        "created_at": _iso(cs.created_at), "updated_at": _iso(cs.updated_at),
+    }
+
+
+def _message_dict(m: Message) -> dict:
+    return {
+        "id": m.id, "session_id": m.session_id, "role": m.role, "content": m.content,
+        "feedback": m.feedback, "provider": m.provider, "created_at": _iso(m.created_at),
+    }
+
+
+def _mistake_dict(m: Mistake) -> dict:
+    return {
+        "id": m.id, "domain": m.domain, "text": m.text, "count": m.count,
+        "first_seen": _iso(m.first_seen), "last_seen": _iso(m.last_seen),
+    }
 
 
 # --- Sessões ---------------------------------------------------------------
 def list_sessions(limit: int = 100) -> list[dict]:
-    with _lock, _conn() as conn:
-        rows = conn.execute("SELECT * FROM sessions ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()
-    return [dict(r) for r in rows]
+    with session_scope() as s:
+        rows = s.scalars(select(ChatSession).order_by(ChatSession.updated_at.desc()).limit(limit))
+        return [_session_dict(r) for r in rows]
 
 
-def get_session(session_id: str) -> dict | None:
-    with _lock, _conn() as conn:
-        row = conn.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
-    return dict(row) if row else None
+def get_session(session_id: str) -> Optional[dict]:
+    with session_scope() as s:
+        cs = s.get(ChatSession, session_id)
+        return _session_dict(cs) if cs else None
 
 
 def create_session(domain: str, level: str, mode: str) -> dict:
-    now = now_iso()
-    sid = str(uuid.uuid4())
-    with _lock, _conn() as conn:
-        conn.execute(
-            "INSERT INTO sessions (id, title, language, domain, level, mode, created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?,?,?)",
-            (sid, "Nova Conversa", domain, domain, level, mode, now, now),
-        )
-        conn.commit()
-    return get_session(sid)  # type: ignore[return-value]
+    with session_scope() as s:
+        cs = ChatSession(domain=domain, level=level, mode=mode)
+        s.add(cs)
+        s.flush()
+        return _session_dict(cs)
 
 
 def update_session(session_id: str, **fields) -> None:
-    fields["updated_at"] = now_iso()
-    sets = ", ".join(f"{k}=?" for k in fields)
-    with _lock, _conn() as conn:
-        conn.execute(f"UPDATE sessions SET {sets} WHERE id=?", (*fields.values(), session_id))
-        conn.commit()
+    with session_scope() as s:
+        cs = s.get(ChatSession, session_id)
+        if cs is None:
+            return
+        for key, value in fields.items():
+            setattr(cs, key, value)
+        cs.updated_at = utcnow()
 
 
 def delete_session(session_id: str) -> None:
-    with _lock, _conn() as conn:
-        conn.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
-        conn.execute("DELETE FROM sessions WHERE id=?", (session_id,))
-        conn.commit()
+    with session_scope() as s:
+        s.execute(delete(Message).where(Message.session_id == session_id))
+        s.execute(delete(ChatSession).where(ChatSession.id == session_id))
 
 
 # --- Mensagens -------------------------------------------------------------
-def get_messages(session_id: str, limit: int | None = None) -> list[dict]:
-    with _lock, _conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM messages WHERE session_id=? ORDER BY created_at ASC", (session_id,)
-        ).fetchall()
-    msgs = [dict(r) for r in rows]
-    return msgs[-limit:] if limit else msgs
+def get_messages(session_id: str, limit: Optional[int] = None) -> list[dict]:
+    with session_scope() as s:
+        q = select(Message).where(Message.session_id == session_id).order_by(Message.seq.desc())
+        if limit:
+            q = q.limit(limit)
+        rows = list(s.scalars(q))
+        return [_message_dict(m) for m in reversed(rows)]
 
 
-def add_message(session_id: str, role: str, content: str, feedback: str = "") -> str:
-    mid = str(uuid.uuid4())
-    with _lock, _conn() as conn:
-        conn.execute(
-            "INSERT INTO messages (id, session_id, role, content, feedback, created_at) VALUES (?,?,?,?,?,?)",
-            (mid, session_id, role, content, feedback, now_iso()),
-        )
-        conn.commit()
-    return mid
+def add_message(session_id: str, role: str, content: str, feedback: str = "", provider: str = "") -> str:
+    with session_scope() as s:
+        last = s.scalar(select(func.max(Message.seq)).where(Message.session_id == session_id)) or 0
+        m = Message(session_id=session_id, seq=last + 1, role=role, content=content,
+                    feedback=feedback, provider=provider)
+        s.add(m)
+        s.flush()
+        return m.id
 
 
 # --- Memória do aluno ------------------------------------------------------
@@ -137,27 +148,28 @@ def _normalize(text: str) -> str:
 
 
 def record_mistakes(domain: str, items: list[str]) -> None:
-    now = now_iso()
-    with _lock, _conn() as conn:
+    now = utcnow()
+    with session_scope() as s:
         for text in items:
-            conn.execute(
-                "INSERT INTO mistakes (id, domain, text, norm, first_seen, last_seen) VALUES (?,?,?,?,?,?)"
-                " ON CONFLICT(domain, norm) DO UPDATE SET count = count + 1, last_seen = excluded.last_seen",
-                (str(uuid.uuid4()), domain, text, _normalize(text), now, now),
-            )
-        conn.commit()
+            norm = _normalize(text)
+            existing = s.scalar(select(Mistake).where(Mistake.domain == domain, Mistake.norm == norm))
+            if existing:
+                existing.count += 1
+                existing.last_seen = now
+            else:
+                s.add(Mistake(domain=domain, text=text, norm=norm, first_seen=now, last_seen=now))
+                s.flush()
 
 
 def top_mistakes(domain: str, limit: int = 10) -> list[dict]:
-    with _lock, _conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM mistakes WHERE domain=? ORDER BY count DESC, last_seen DESC LIMIT ?",
-            (domain, limit),
-        ).fetchall()
-    return [dict(r) for r in rows]
+    with session_scope() as s:
+        rows = s.scalars(
+            select(Mistake).where(Mistake.domain == domain)
+            .order_by(Mistake.count.desc(), Mistake.last_seen.desc()).limit(limit)
+        )
+        return [_mistake_dict(m) for m in rows]
 
 
 def delete_mistake(mistake_id: str) -> None:
-    with _lock, _conn() as conn:
-        conn.execute("DELETE FROM mistakes WHERE id=?", (mistake_id,))
-        conn.commit()
+    with session_scope() as s:
+        s.execute(delete(Mistake).where(Mistake.id == mistake_id))

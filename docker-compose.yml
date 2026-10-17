@@ -1,0 +1,53 @@
+# Learning Tutor — serviços de infraestrutura
+#
+#   docker compose up -d db            → só o PostgreSQL (backend rodando no Windows)
+#   docker compose --profile app up -d → PostgreSQL + backend em container
+#
+# O Ollama roda direto no Windows (usa a GPU sem complicação) e é acessado
+# pelo container via host.docker.internal.
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.0-pg17
+    container_name: tutor-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tutor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tutor}
+      POSTGRES_DB: ${POSTGRES_DB:-tutor}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tutor} -d ${POSTGRES_DB:-tutor}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: tutor-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-tutor}:${POSTGRES_PASSWORD:-tutor}@db:5432/${POSTGRES_DB:-tutor}
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      LOG_FORMAT: json
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./models:/app/models:ro
+      - whisper-cache:/root/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  whisper-cache:

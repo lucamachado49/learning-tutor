@@ -1,24 +1,31 @@
 # start_backend.ps1
-# Inicia o backend FastAPI usando o .venv correto da pasta raiz.
-# Execute a partir de qualquer pasta dentro do projeto.
+# Modo desenvolvimento: PostgreSQL no Docker + backend no Windows (hot reload).
+# Para rodar o backend também em container:  docker compose --profile app up -d --build
 
-$VenvPython = "C:\Users\Lucas\Downloads\language\.venv\Scripts\python.exe"
-$BackendDir = "C:\Users\Lucas\Downloads\language\backend"
+$Root       = $PSScriptRoot
+$VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
+$BackendDir = Join-Path $Root "backend"
 
 if (-not (Test-Path $VenvPython)) {
     Write-Host "ERRO: .venv nao encontrado em $VenvPython" -ForegroundColor Red
-    Write-Host "Execute primeiro: python -m venv .venv" -ForegroundColor Yellow
+    Write-Host "Execute primeiro: python -m venv .venv; .venv\Scripts\pip install -r requirements.txt" -ForegroundColor Yellow
+    exit 1
+}
+
+# O backend em container ocupa a porta 8000; para o modo dev ele precisa estar parado
+docker compose -f (Join-Path $Root "docker-compose.yml") stop backend 2>$null | Out-Null
+
+Write-Host "Subindo PostgreSQL (docker compose)..." -ForegroundColor Cyan
+docker compose -f (Join-Path $Root "docker-compose.yml") up -d --wait db
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERRO: nao foi possivel iniciar o PostgreSQL. O Docker Desktop esta aberto?" -ForegroundColor Red
     exit 1
 }
 
 Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Language Tutor — Backend (FastAPI)   " -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  URL: http://127.0.0.1:8000           " -ForegroundColor Green
-Write-Host "  Docs: http://127.0.0.1:8000/docs     " -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  API:  http://127.0.0.1:8000" -ForegroundColor Green
+Write-Host "  Docs: http://127.0.0.1:8000/docs" -ForegroundColor Green
 Write-Host ""
 
-# Roda uvicorn com o python do .venv (garante pacotes corretos)
+# Migracoes do Alembic rodam automaticamente no startup
 & $VenvPython -m uvicorn main:app --reload --host 127.0.0.1 --port 8000 --app-dir $BackendDir

@@ -49,4 +49,8 @@ KOKORO_VOICES = KOKORO_DIR / "voices-v1.0.bin"
 PIPER_DIR    = MODELS_DIR / "piper"
 
 # --- Banco -------------------------------------------------------------
-DB_PATH = BACKEND_DIR / "tutor.db"
+DATABASE_URL = _env("DATABASE_URL", "postgresql+psycopg://tutor:tutor@127.0.0.1:5433/tutor")
+
+# --- Logs --------------------------------------------------------------
+LOG_LEVEL  = _env("LOG_LEVEL", "INFO")
+LOG_FORMAT = _env("LOG_FORMAT", "text")   # "text" ou "json"

@@ -8,3 +8,4 @@ __pycache__/
 .claude/
 *.log
 .pytest_cache/
+*.db.bak

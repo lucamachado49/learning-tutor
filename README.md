@@ -105,19 +105,38 @@ recorrentes ("Memória" em Configurações) e os retoma nas próximas sessões.
 
 ### Passo 6 — Execute a aplicação
 
-Certifique-se de que o **Ollama está rodando** (`ollama serve`) e então:
+Pré-requisitos: **Docker Desktop aberto** e **Ollama rodando** (`ollama serve`).
 
+**Opção A — desenvolvimento (backend no Windows, com hot reload):**
 ```powershell
-# Terminal 1 — backend
-.\start_backend.ps1
-
-# Terminal 2 — frontend
-cd frontend
-npm install
-npm run dev
+.\start_backend.ps1            # sobe o PostgreSQL no Docker e o backend
+cd frontend; npm run dev        # em outro terminal
 ```
 
-Abra `http://localhost:5173` no navegador 🎉
+**Opção B — backend em container:**
+```powershell
+docker compose --profile app up -d --build
+cd frontend; npm run dev
+```
+
+Abra `http://localhost:5173` 🎉
+
+### Migrando conversas antigas (SQLite → PostgreSQL)
+```powershell
+.venv\Scripts\python.exe backend\scripts\migrate_sqlite.py backend	utor.db.bak
+```
+
+### Testes
+```powershell
+cd backend; ..\.venv\Scripts\python.exe -m pytest -q
+```
+
+### Mudando o esquema do banco
+Edite `backend/models.py` e gere uma migração:
+```powershell
+cd backend; ..\.venv\Scriptslembic.exe revision --autogenerate -m "descricao"
+```
+As migrações são aplicadas automaticamente quando o backend inicia.
 
 ---
 
@@ -141,7 +160,16 @@ Flags disponíveis:
 
 ```
 language/
-├── backend/main.py         # API FastAPI (chat, STT, TTS)
+├── docker-compose.yml      # PostgreSQL + pgvector (e backend opcional)
+├── backend/
+│   ├── main.py             # API FastAPI (rotas)
+│   ├── config.py           # Configuração via .env
+│   ├── llm.py              # Provedores LLM com fallback (Gemini/Groq/Ollama)
+│   ├── domains.py          # Domínios, níveis, modos e prompts
+│   ├── models.py, db.py    # ORM SQLAlchemy e acesso a dados
+│   ├── migrations/         # Migrações Alembic
+│   ├── tts.py              # Kokoro / Piper
+│   └── tests/              # pytest
 ├── frontend/               # Interface React (Vite)
 ├── download_models.py      # Gerenciador de modelos Piper TTS
 ├── requirements.txt        # Dependências Python

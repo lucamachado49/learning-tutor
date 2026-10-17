@@ -1,0 +1,9 @@
+.venv
+.git
+.claude
+frontend
+models
+**/__pycache__
+**/*.db
+**/*.db.bak
+.env
