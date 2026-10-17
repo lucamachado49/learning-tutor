@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { X, Trash2 } from 'lucide-react'
 import { DOMAINS, MODES, PROVIDERS, useApp } from '../context/AppContext'
-import { getMemory, deleteMemoryItem } from '../lib/api'
+import { getMemory, deleteMemoryItem, getMastery, deleteMasteryItem } from '../lib/api'
 
 function Label({ children }) {
   return (
@@ -32,9 +32,13 @@ function Chip({ active, onClick, children, className = '' }) {
 export default function SettingsModal() {
   const { settingsOpen, setSettingsOpen, settings, setSettings, health } = useApp()
   const [memory, setMemory] = useState([])
+  const [mastery, setMastery] = useState([])
 
   useEffect(() => {
-    if (settingsOpen) getMemory(settings.language).then(setMemory)
+    if (settingsOpen) {
+      getMemory(settings.language).then(setMemory)
+      getMastery(settings.language).then(setMastery)
+    }
   }, [settingsOpen, settings.language])
 
   if (!settingsOpen) return null
@@ -147,6 +151,31 @@ export default function SettingsModal() {
               {!providers.gemini?.available && !providers.groq?.available &&
                 <span className="block mt-1">Adicione GEMINI_API_KEY / GROQ_API_KEY no arquivo .env</span>}
             </p>
+          </div>
+
+          {/* Mapa de domínio */}
+          <div>
+            <Label>Mapa de domínio — {domain.label}</Label>
+            {mastery.length === 0 ? (
+              <p className="text-xs text-neutral-400">Resolva exercícios para o tutor estimar seu domínio por conceito.</p>
+            ) : (
+              <ul className="space-y-1.5 max-h-48 overflow-y-auto">
+                {mastery.map(m => (
+                  <li key={m.id} className="group flex items-center gap-2 text-xs">
+                    <span className="w-36 truncate text-neutral-700" title={m.concept}>{m.concept}</span>
+                    <div className="flex-1 h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${m.score < 50 ? 'bg-red-400' : m.score < 75 ? 'bg-amber-400' : 'bg-emerald-500'}`}
+                           style={{ width: `${Math.round(m.score)}%` }} />
+                    </div>
+                    <span className="w-8 text-right tabular-nums text-neutral-500">{Math.round(m.score)}</span>
+                    <button onClick={async () => { await deleteMasteryItem(m.id); setMastery(x => x.filter(i => i.id !== m.id)) }}
+                            className="opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-400">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* Memória */}

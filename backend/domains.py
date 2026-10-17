@@ -32,7 +32,40 @@ MEMORY_SECTION = """
 [ERROS]
 <Opcional. Liste aqui, um por linha começando com "- ", apenas erros ou lacunas
 NOVAS e concretas do aluno nesta mensagem (ex.: "- usa 'make' no lugar de 'do' em 'do homework'").
-Se não houver nada relevante, escreva apenas "- nenhum".>"""
+Se não houver nada relevante, escreva apenas "- nenhum".>
+
+[DOMINIO]
+<Opcional. Só quando o aluno RESPONDEU um exercício ou pergunta: avalie cada conceito
+envolvido, um por linha, no formato "- nome curto do conceito: nota de 0 a 100".
+Ex.: "- regra da cadeia: 60". Caso contrário, escreva apenas "- nenhum".>"""
+
+# Instruções extras das ações rápidas da interface
+ACTIONS = {
+    "roadmap": """AÇÃO: ROADMAP DE ESTUDO.
+Monte um roadmap personalizado em etapas (semanas), usando o SUMÁRIO DOS LIVROS abaixo como
+espinha dorsal: para cada etapa, capítulos/seções com páginas, objetivo, pré-requisitos e
+exercícios sugeridos. Priorize os conceitos com menor domínio e os erros recorrentes do aluno.
+Use EXATAMENTE os títulos e páginas que aparecem no sumário — não invente seções, páginas nem
+números de exercícios (diga apenas "exercícios do fim do capítulo X").
+Ignore a regra de terminar com pergunta curta: termine perguntando se o aluno quer começar pela etapa 1.""",
+    "exercise": """AÇÃO: EXERCÍCIO.
+Proponha UM exercício (apenas o enunciado, sem a solução), adequado ao nível do aluno.
+Prefira exercícios dos trechos marcados como EXERCÍCIO nos materiais, citando a fonte [n];
+se não houver, crie um baseado no conteúdo dos trechos. Foque nos conceitos de menor domínio.
+Diga ao aluno para responder com o raciocínio completo. No [DOMINIO] escreva "- nenhum".
+Se a resposta for calculável (contas, derivadas, integrais, matrizes, autovalores, probabilidades),
+adicione AO FINAL a seção oculta abaixo, com expressões SymPy (uma por linha, sem import, sem
+texto) que CALCULAM a resposta. O sistema executa e usa o resultado como gabarito confiável:
+
+[VERIFICACAO]
+<expressões que calculam a resposta DESTE exercício, ex.: "M = Matrix([[...]])" e "M.det()">""",
+    "diagnosis": """AÇÃO: DIAGNÓSTICO.
+Analise o MAPA DE DOMÍNIO e a MEMÓRIA DO ALUNO e explique, de forma objetiva: pontos fortes,
+lacunas prioritárias (com o porquê), e um plano curto de próximos passos com seções dos livros
+(se houver). Baseie-se SOMENTE nos dados do mapa e da memória: nunca invente pontos fortes ou
+fracos. Se não houver dados, diga isso claramente e proponha começar por exercícios para medir
+o nível. No [DOMINIO] escreva "- nenhum".""",
+}
 
 
 @dataclass
@@ -54,11 +87,49 @@ class Domain:
             "levels": self.levels, "default_level": self.default_level,
         }
 
-    def system_prompt(self, level: str, mode: str, memory: list[str]) -> str:
+    def system_prompt(
+        self,
+        level: str,
+        mode: str,
+        memory: list[str],
+        mastery: list[dict] | None = None,
+        references: list[dict] | None = None,
+        outline: str = "",
+        action: str | None = None,
+    ) -> str:
         if self.kind == "language":
             prompt = _language_prompt(self, level, mode)
         else:
             prompt = _tech_prompt(self, level, mode)
+
+        if references:
+            blocks = []
+            for i, r in enumerate(references, 1):
+                pages = f"p. {r['page_start']}" + (f"–{r['page_end']}" if r["page_end"] != r["page_start"] else "")
+                tag = " · EXERCÍCIO" if r.get("kind") == "exercise" else ""
+                blocks.append(f"[{i}] {r['book']} — {r['section'] or 'sem seção'} ({pages}){tag}\n{r['content']}")
+            prompt += (
+                "\n\nMATERIAIS DE REFERÊNCIA (trechos dos livros do aluno — use como base principal):\n"
+                + "\n\n---\n\n".join(blocks)
+                + "\n\nRegras de citação: ao usar um trecho, cite-o como [n] logo após a afirmação. "
+                "Se os trechos não cobrirem a pergunta, diga isso explicitamente e responda com "
+                "conhecimento geral."
+            )
+
+        if outline:
+            prompt += f"\n\nSUMÁRIO DOS LIVROS:\n{outline}"
+
+        if mastery:
+            items = "\n".join(
+                f"- {m['concept']}: {round(m['score'])}/100 ({m['attempts']} avaliações)" for m in mastery
+            )
+            prompt += f"\n\nMAPA DE DOMÍNIO DO ALUNO (por conceito):\n{items}"
+
+        if action == "diagnosis" and not mastery and not memory:
+            prompt += "\n\nDADOS DO ALUNO: nenhum ainda (mapa de domínio e memória vazios)."
+
+        if action in ACTIONS:
+            prompt += "\n\n" + ACTIONS[action]
 
         if memory:
             items = "\n".join(f"- {m}" for m in memory)

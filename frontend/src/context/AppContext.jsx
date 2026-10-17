@@ -47,6 +47,7 @@ export function AppProvider({ children }) {
   // UI
   const [sidebarOpen, setSidebarOpen]   = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [libraryOpen, setLibraryOpen]   = useState(false)
   const [isStreaming, setIsStreaming]   = useState(false)
 
   // Configurações
@@ -56,6 +57,7 @@ export function AppProvider({ children }) {
     mode:     'conversation',
     provider: 'auto',
     model:    'qwen2.5:7b',    // modelo do Ollama
+    bookIds:  [],              // livros usados como base
   })
 
   // Ao trocar de domínio, ajusta o nível para um válido naquele domínio
@@ -139,8 +141,8 @@ export function AppProvider({ children }) {
   // ── Criar nova sessão ─────────────────────────────────────
   const createSession = useCallback(async () => {
     try {
-      const { language, level, mode } = settingsRef.current
-      const session = await api.createSession(language, level, mode)
+      const { language, level, mode, bookIds } = settingsRef.current
+      const session = await api.createSession(language, level, mode, bookIds)
       setSessions(prev => [session, ...prev])
       setCurrentSession(session)
       setMessages([])
@@ -162,6 +164,7 @@ export function AppProvider({ children }) {
       language: session.domain ?? session.language ?? s.language,
       level:    session.level ?? s.level,
       mode:     session.mode ?? s.mode,
+      bookIds:  session.book_ids ?? [],
     }))
     try {
       const msgs = await api.getMessages(session.id)
@@ -185,6 +188,20 @@ export function AppProvider({ children }) {
     }
   }, [currentSession])
 
+  // ── Livros usados como base (sessão atual + próximas) ─────
+  const setBookIds = useCallback(async (bookIds) => {
+    setSettings(s => ({ ...s, bookIds }))
+    if (currentSession) {
+      try {
+        const updated = await api.setSessionBooks(currentSession.id, bookIds)
+        setCurrentSession(updated)
+        setSessions(prev => prev.map(s => s.id === updated.id ? updated : s))
+      } catch (err) {
+        console.error('setBookIds:', err)
+      }
+    }
+  }, [currentSession, setSettings])
+
   // ── Atualizar título da sessão no estado local ────────────
   const updateSessionTitle = useCallback((sessionId, title) => {
     setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title } : s))
@@ -201,9 +218,10 @@ export function AppProvider({ children }) {
       // ui
       sidebarOpen, setSidebarOpen,
       settingsOpen, setSettingsOpen,
+      libraryOpen, setLibraryOpen,
       isStreaming, setIsStreaming,
       // config
-      settings, setSettings,
+      settings, setSettings, setBookIds,
       // status
       health, backendOnline,
     }}>

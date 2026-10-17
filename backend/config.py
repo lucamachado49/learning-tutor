@@ -51,6 +51,13 @@ PIPER_DIR    = MODELS_DIR / "piper"
 # --- Banco -------------------------------------------------------------
 DATABASE_URL = _env("DATABASE_URL", "postgresql+psycopg://tutor:tutor@127.0.0.1:5433/tutor")
 
+# --- Biblioteca (RAG) ---------------------------------------------------
+BOOKS_DIR   = Path(_env("BOOKS_DIR", str(ROOT_DIR / "data" / "books")))
+EMBED_MODEL = _env("EMBED_MODEL", "bge-m3")       # via Ollama
+EMBED_DIM   = 1024                                # dimensão do bge-m3 (fixa no esquema)
+RAG_TOP_K   = int(_env("RAG_TOP_K", "6"))
+CHUNK_CHARS = int(_env("CHUNK_CHARS", "1500"))
+
 # --- Logs --------------------------------------------------------------
 LOG_LEVEL  = _env("LOG_LEVEL", "INFO")
 LOG_FORMAT = _env("LOG_FORMAT", "text")   # "text" ou "json"

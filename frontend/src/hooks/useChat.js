@@ -16,7 +16,7 @@ export function useChat() {
     updateSessionTitle,
   } = useApp()
 
-  const sendMessage = useCallback(async (text) => {
+  const sendMessage = useCallback(async (text, action = null) => {
     if (!text.trim()) return
 
     // Se não houver sessão ativa, cria uma nova
@@ -62,6 +62,7 @@ export function useChat() {
       mode:        settings.mode,
       provider:    settings.provider,
       ollamaModel: settings.model,
+      action,
 
       onToken: (token) => {
         // Acumula tokens no placeholder
@@ -71,7 +72,7 @@ export function useChat() {
         }))
       },
 
-      onDone: ({ message, feedback, message_id, provider }) => {
+      onDone: ({ message, feedback, message_id, provider, citations, verified }) => {
         // Substitui placeholder pela mensagem final parseada
         updateLastMessage(msg => ({
           ...msg,
@@ -79,6 +80,8 @@ export function useChat() {
           content:  message,
           feedback: feedback,
           provider: provider,
+          citations: citations,
+          verified: verified,
           streaming: false,
         }))
         setIsStreaming(false)

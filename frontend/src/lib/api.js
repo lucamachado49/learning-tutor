@@ -28,11 +28,11 @@ export async function getSessions() {
   }
 }
 
-export async function createSession(domain, level, mode) {
+export async function createSession(domain, level, mode, bookIds = []) {
   const r = await fetch(`${BASE}/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ domain, level, mode }),
+    body: JSON.stringify({ domain, level, mode, book_ids: bookIds }),
   })
   if (!r.ok) throw new Error('Erro ao criar sessão')
   return r.json()
@@ -58,7 +58,7 @@ export async function deleteSession(sessionId) {
  * @param {function} params.onDone    - callback({message, feedback, message_id})
  * @param {function} params.onError   - callback(error: string)
  */
-export async function streamChat({ sessionId, message, domain, level, mode, provider, ollamaModel, onToken, onDone, onError }) {
+export async function streamChat({ sessionId, message, domain, level, mode, provider, ollamaModel, action, onToken, onDone, onError }) {
   let response
   try {
     response = await fetch(`${BASE}/chat/stream`, {
@@ -72,6 +72,7 @@ export async function streamChat({ sessionId, message, domain, level, mode, prov
         mode,
         provider,
         ollama_model: ollamaModel,
+        action,
       }),
     })
   } catch {
@@ -116,6 +117,8 @@ export async function streamChat({ sessionId, message, domain, level, mode, prov
               feedback:   data.feedback   ?? '',
               message_id: data.message_id ?? '',
               provider:   data.provider   ?? '',
+              citations:  data.citations  ?? [],
+              verified:   data.verified   ?? false,
             })
             return
           }
@@ -169,4 +172,52 @@ export async function getMemory(domain) {
 
 export async function deleteMemoryItem(id) {
   await fetch(`${BASE}/memory/item/${id}`, { method: 'DELETE' })
+}
+
+// ── Mapa de domínio ───────────────────────────────────────
+export async function getMastery(domain) {
+  const r = await fetch(`${BASE}/mastery/${domain}`)
+  if (!r.ok) return []
+  return r.json()
+}
+
+export async function deleteMasteryItem(id) {
+  await fetch(`${BASE}/mastery/item/${id}`, { method: 'DELETE' })
+}
+
+// ── Biblioteca ────────────────────────────────────────────
+export async function getBooks() {
+  const r = await fetch(`${BASE}/books`)
+  if (!r.ok) return []
+  return r.json()
+}
+
+export async function uploadBook(file, domain) {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('domain', domain)
+  const r = await fetch(`${BASE}/books`, { method: 'POST', body: form })
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail ?? 'Falha no envio do PDF')
+  }
+  return r.json()
+}
+
+export async function deleteBook(id) {
+  await fetch(`${BASE}/books/${id}`, { method: 'DELETE' })
+}
+
+export async function retryBook(id) {
+  await fetch(`${BASE}/books/${id}/retry`, { method: 'POST' })
+}
+
+export async function setSessionBooks(sessionId, bookIds) {
+  const r = await fetch(`${BASE}/sessions/${sessionId}/books`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ book_ids: bookIds }),
+  })
+  if (!r.ok) throw new Error('Erro ao vincular livros')
+  return r.json()
 }

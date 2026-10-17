@@ -13,11 +13,18 @@ export function visiblePart(text) {
   return cut >= 0 ? t.slice(0, cut).trimEnd() : t
 }
 
+// remark-math só entende $...$ e $$...$$; muitos LLMs usam \( \) e \[ \]
+function normalizeMath(text) {
+  return (text ?? '')
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => `\n$$${m}$$\n`)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => `$${m.trim()}$`)
+}
+
 export default function Markdown({ children }) {
   return (
     <div className="markdown">
       <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-        {children}
+        {normalizeMath(children)}
       </ReactMarkdown>
     </div>
   )

@@ -217,3 +217,14 @@ async def stream_chat(
             errors.append(f"{prov.label}: {exc}")
 
     raise ProviderUnavailable("Nenhum LLM disponível. " + " | ".join(errors))
+
+
+async def complete(
+    messages: list[dict],
+    provider: str = "auto",
+    ollama_model: Optional[str] = None,
+    temperature: float = 0.1,
+) -> str:
+    """Resposta completa (sem streaming) — para tarefas auxiliares curtas."""
+    parts = [ev.token async for ev in stream_chat(messages, provider, ollama_model, temperature)]
+    return "".join(parts)

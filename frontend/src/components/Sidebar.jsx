@@ -1,6 +1,6 @@
 // src/components/Sidebar.jsx
 import { useState } from 'react'
-import { MessageSquarePlus, Settings, Trash2, ChevronLeft, ChevronRight, Bot, Circle } from 'lucide-react'
+import { MessageSquarePlus, Settings, Trash2, ChevronLeft, ChevronRight, Bot, Circle, Library } from 'lucide-react'
 import { LANGUAGES, useApp } from '../context/AppContext'
 
 function formatDate(iso) {
@@ -18,7 +18,7 @@ export default function Sidebar() {
     sessions, currentSession, isStreaming,
     createSession, selectSession, removeSession,
     sidebarOpen, setSidebarOpen,
-    setSettingsOpen,
+    setSettingsOpen, setLibraryOpen,
     settings, health, backendOnline,
   } = useApp()
 
@@ -161,6 +161,18 @@ export default function Sidebar() {
                 }
               </span>
             </div>
+
+            <button
+              onClick={() => setLibraryOpen(true)}
+              className="
+                w-full flex items-center gap-2 px-3 py-2.5 rounded-xl
+                text-sm text-neutral-600 hover:bg-white hover:text-neutral-900
+                transition-colors
+              "
+            >
+              <Library className="w-4 h-4" />
+              Biblioteca
+            </button>
 
             <button
               onClick={() => setSettingsOpen(true)}

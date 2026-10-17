@@ -12,7 +12,8 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Não desativa os loggers do app quando as migrações rodam no startup
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # add your model's MetaData object here
 # for 'autogenerate' support
@@ -22,6 +23,13 @@ import config as app_config  # noqa: E402
 from models import Base  # noqa: E402
 
 target_metadata = Base.metadata
+
+# Objetos criados manualmente nas migrações (fora do ORM): o autogenerate não deve removê-los
+_MANUAL = {"tsv", "ix_chunks_tsv", "ix_chunks_embedding"}
+
+
+def include_object(obj, name, type_, reflected, compare_to):
+    return name not in _MANUAL
 
 # URL vem do .env / variável de ambiente, não do alembic.ini
 if not config.get_main_option("sqlalchemy.url") or "driver://" in config.get_main_option("sqlalchemy.url"):
@@ -49,6 +57,7 @@ def run_migrations_offline() -> None:
     context.configure(
         url=url,
         target_metadata=target_metadata,
+        include_object=include_object,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -72,7 +81,8 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, target_metadata=target_metadata,
+            include_object=include_object,
         )
 
         with context.begin_transaction():

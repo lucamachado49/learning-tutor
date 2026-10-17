@@ -1,13 +1,14 @@
 // src/components/MessageItem.jsx
 import { useState, useCallback } from 'react'
-import { ChevronDown, Volume2, Loader2, User, Bot } from 'lucide-react'
+import { ChevronDown, Volume2, Loader2, User, Bot, BookOpen, CheckCircle2 } from 'lucide-react'
 import { LANGUAGES, useApp } from '../context/AppContext'
 import { fetchTTS } from '../lib/api'
 import Markdown, { visiblePart } from './Markdown'
 
 export default function MessageItem({ message }) {
   const { settings } = useApp()
-  const { role, content, feedback, streaming, isError, provider } = message
+  const { role, content, feedback, streaming, isError, provider, citations, verified } = message
+  const [citesOpen, setCitesOpen] = useState(false)
 
   const [feedbackOpen, setFeedbackOpen]   = useState(false)
   const [ttsLoading, setTtsLoading]       = useState(false)
@@ -118,12 +119,45 @@ export default function MessageItem({ message }) {
                   Feedback
                 </button>
               )}
+              {citations?.length > 0 && (
+                <button
+                  onClick={() => setCitesOpen(o => !o)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-neutral-400 border border-neutral-200 hover:text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50 transition-all"
+                >
+                  <BookOpen className="w-3 h-3" />
+                  {citations.length} fonte{citations.length > 1 ? 's' : ''}
+                </button>
+              )}
+
+              {verified && (
+                <span title="O gabarito deste exercício foi calculado pelo SymPy e será usado na correção"
+                      className="flex items-center gap-1 text-xs text-emerald-600">
+                  <CheckCircle2 className="w-3 h-3" /> gabarito verificado
+                </span>
+              )}
+
               {provider && (
                 <span className="ml-auto text-[11px] text-neutral-300" title="Provedor que gerou a resposta">
                   {provider}
                 </span>
               )}
             </div>
+
+            {/* Citações */}
+            {citesOpen && citations?.length > 0 && (
+              <div className="animate-slide-up space-y-1.5">
+                {citations.map(c => (
+                  <div key={c.n} className="bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2">
+                    <p className="text-xs font-medium text-neutral-700">
+                      [{c.n}] {c.book} — p. {c.page_start}{c.page_end !== c.page_start ? `–${c.page_end}` : ''}
+                      {c.kind === 'exercise' && <span className="ml-1.5 text-amber-600">· exercício</span>}
+                    </p>
+                    {c.section && <p className="text-[11px] text-neutral-400 truncate">{c.section}</p>}
+                    <p className="text-xs text-neutral-500 mt-1 line-clamp-3">{c.snippet}</p>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* TTS Error */}
             {ttsError && (

@@ -1,13 +1,19 @@
 // src/components/InputBar.jsx
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Mic, MicOff, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowUp, Mic, MicOff, Loader2, AlertCircle, Map, PenLine, Stethoscope, Library } from 'lucide-react'
+
+const QUICK_ACTIONS = [
+  { id: 'roadmap',   label: 'Roadmap',     icon: Map,         hint: 'Plano de estudo baseado nos livros e no seu domínio' },
+  { id: 'exercise',  label: 'Exercício',   icon: PenLine,     hint: 'Exercício do livro (escreva um tema antes para direcionar)' },
+  { id: 'diagnosis', label: 'Diagnóstico', icon: Stethoscope, hint: 'No que você precisa melhorar' },
+]
 import { useApp, LANGUAGES } from '../context/AppContext'
 import { useChat } from '../hooks/useChat'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
 import { transcribeAudio } from '../lib/api'
 
 export default function InputBar() {
-  const { isStreaming, settings, currentSession, createSession, health, backendOnline } = useApp()
+  const { isStreaming, settings, currentSession, createSession, health, backendOnline, setLibraryOpen } = useApp()
   const { sendMessage } = useChat()
   const {
     isRecording, audioBlob, durationSec, error: recError,
@@ -68,6 +74,15 @@ export default function InputBar() {
     sendMessage(msg)
   }, [canSend, text, currentSession, createSession, sendMessage])
 
+  // ── Ações rápidas (roadmap, exercício, diagnóstico) ─────
+  const runAction = useCallback(async (action, label) => {
+    if (isStreaming || !backendOnline) return
+    const extra = text.trim()
+    setText('')
+    if (!currentSession) await createSession()
+    sendMessage(extra ? `${label}: ${extra}` : label, action)
+  }, [isStreaming, backendOnline, text, currentSession, createSession, sendMessage])
+
   // ── Teclas ──────────────────────────────────────────────
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -118,6 +133,30 @@ export default function InputBar() {
             Gravando… {durationSec}s — clique no microfone para parar
           </div>
         )}
+
+        {/* Ações rápidas */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+          {QUICK_ACTIONS.map(a => (
+            <button
+              key={a.id}
+              onClick={() => runAction(a.id, a.label)}
+              disabled={isStreaming || !backendOnline}
+              title={a.hint}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-neutral-600 border border-neutral-200 hover:bg-neutral-50 hover:border-neutral-300 disabled:opacity-40 transition-all"
+            >
+              <a.icon className="w-3 h-3" /> {a.label}
+            </button>
+          ))}
+          <button
+            onClick={() => setLibraryOpen(true)}
+            className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-neutral-500 hover:text-neutral-800 hover:bg-neutral-50 transition-all"
+          >
+            <Library className="w-3 h-3" />
+            {settings.bookIds.length > 0
+              ? `${settings.bookIds.length} livro${settings.bookIds.length > 1 ? 's' : ''} como base`
+              : 'Usar livros'}
+          </button>
+        </div>
 
         {/* Caixa de entrada */}
         <div className="flex items-end gap-2 bg-white border border-neutral-200 rounded-2xl px-3 py-2 shadow-sm focus-within:border-neutral-400 transition-colors">

@@ -121,6 +121,30 @@ cd frontend; npm run dev
 
 Abra `http://localhost:5173` 🎉
 
+### 📚 Biblioteca (seus livros como base)
+
+1. Baixe o modelo de embeddings (uma vez): `ollama pull bge-m3`
+2. No app, abra **Biblioteca** e envie PDFs (livros universitários, papers, apostilas).
+   A importação roda em segundo plano (~1 min a cada 50 páginas): extrai o texto,
+   o sumário e os exercícios, e gera os embeddings.
+3. Marque os livros que o tutor deve usar. As respostas passam a citar **livro e página** (`[n]`).
+
+Ações rápidas acima da caixa de texto:
+- **Roadmap** — plano de estudo em etapas montado sobre o sumário dos livros e o seu domínio.
+- **Exercício** — exercício tirado/derivado dos livros (escreva um tema antes para direcionar).
+  Em matemática, o gabarito é **calculado com SymPy** numa sandbox e usado na correção,
+  para o tutor não aceitar uma resposta errada.
+- **Diagnóstico** — pontos fortes e lacunas a partir do **mapa de domínio por conceito**
+  (atualizado a cada exercício corrigido) e da memória de erros.
+
+Busca híbrida: similaridade vetorial (pgvector/HNSW) + busca textual (tsvector), combinadas
+com Reciprocal Rank Fusion — funciona com perguntas em português sobre livros em inglês.
+
+> **Qualidade:** o modelo local de 7B serve para testar, mas segue mal formatos e inventa
+> detalhes em roadmaps. Para estudar de verdade, configure `GEMINI_API_KEY` (gratuita) no `.env`.
+> Limitação atual: PDFs escaneados (imagem) precisam de OCR, e fórmulas complexas podem sair
+> imperfeitas na extração.
+
 ### Migrando conversas antigas (SQLite → PostgreSQL)
 ```powershell
 .venv\Scripts\python.exe backend\scripts\migrate_sqlite.py backend\tutor.db.bak
@@ -168,6 +192,8 @@ language/
 │   ├── domains.py          # Domínios, níveis, modos e prompts
 │   ├── models.py, db.py    # ORM SQLAlchemy e acesso a dados
 │   ├── migrations/         # Migrações Alembic
+│   ├── library.py          # Biblioteca: importação de PDF, embeddings, busca híbrida
+│   ├── verifier.py         # Gabaritos SymPy em sandbox
 │   ├── tts.py              # Kokoro / Piper
 │   └── tests/              # pytest
 ├── frontend/               # Interface React (Vite)

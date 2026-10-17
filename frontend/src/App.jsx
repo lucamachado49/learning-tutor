@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar'
 import ChatArea from './components/ChatArea'
 import InputBar from './components/InputBar'
 import SettingsModal from './components/SettingsModal'
+import LibraryModal from './components/LibraryModal'
 
 function AppLayout() {
   const { sidebarOpen } = useApp()
@@ -23,6 +24,7 @@ function AppLayout() {
 
       {/* Modal de configurações (overlay) */}
       <SettingsModal />
+      <LibraryModal />
     </div>
   )
 }

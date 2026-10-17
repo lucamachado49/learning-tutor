@@ -32,3 +32,24 @@ def test_parse_without_tags_uses_whole_text():
 def test_parse_feedback_without_accent():
     msg, fb, _ = _parse_response("[MENSAGEM]\nOi\n[FEEDBACK PEDAGOGICO]\nBom")
     assert (msg, fb) == ("Oi", "Bom")
+
+
+def test_parse_mastery_scores():
+    from main import _parse_mastery
+    text = "[MENSAGEM]\nok\n[DOMINIO]\n- regra da cadeia: 60\n- autovalores: 85/100\n- texto solto\n- nenhum"
+    assert _parse_mastery(text) == [("regra da cadeia", 60.0), ("autovalores", 85.0)]
+
+
+def test_message_excludes_hidden_sections():
+    msg, fb, _ = _parse_response("[MENSAGEM]\nCalcule.\n[FEEDBACK PEDAGÓLICO]\nDica\n[VERIFICACAO]\nA.det()")
+    assert msg == "Calcule." and fb == "Dica"
+
+
+def test_used_citations():
+    from main import _used_citations
+    refs = [{"book_id": "b", "book": "L", "section": "s", "page_start": i, "page_end": i,
+             "kind": "text", "content": f"<b>t{i}</b>"} for i in range(1, 6)]
+    assert [c["n"] for c in _used_citations("como visto em [2] e [4]", refs)] == [2, 4]
+    # sem citação explícita: só as 3 mais relevantes, com texto limpo
+    cites = _used_citations("sem citação", refs)
+    assert [c["n"] for c in cites] == [1, 2, 3] and cites[0]["snippet"] == "t1"

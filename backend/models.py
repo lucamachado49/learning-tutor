@@ -11,8 +11,11 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+import config
 
 
 def utcnow() -> datetime:
@@ -35,6 +38,8 @@ class ChatSession(Base):
     domain:     Mapped[str] = mapped_column(String(32), index=True)
     level:      Mapped[str] = mapped_column(String(32))
     mode:       Mapped[str] = mapped_column(String(32), default="conversation")
+    # Livros da biblioteca usados como base nesta sessão
+    book_ids:   Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
@@ -54,6 +59,9 @@ class Message(Base):
     content:    Mapped[str] = mapped_column(Text)
     feedback:   Mapped[str] = mapped_column(Text, default="")
     provider:   Mapped[str] = mapped_column(String(32), default="")
+    citations:  Mapped[list] = mapped_column(JSON, default=list)
+    # Gabarito do exercício calculado pelo SymPy (oculto do aluno)
+    answer_key: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
     session: Mapped[ChatSession] = relationship(back_populates="messages")
@@ -74,3 +82,58 @@ class Mistake(Base):
     count:      Mapped[int] = mapped_column(Integer, default=1)
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_seen:  Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ConceptMastery(Base):
+    """Domínio estimado do aluno por conceito (0–100), atualizado a cada avaliação."""
+
+    __tablename__ = "concept_mastery"
+    __table_args__ = (UniqueConstraint("domain", "norm", name="uq_mastery_domain_norm"),)
+
+    id:         Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    domain:     Mapped[str] = mapped_column(String(32), index=True)
+    concept:    Mapped[str] = mapped_column(String(200))
+    norm:       Mapped[str] = mapped_column(String(200))
+    score:      Mapped[float] = mapped_column(Float, default=0.0)
+    attempts:   Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- Biblioteca ------------------------------------------------------------
+class Book(Base):
+    __tablename__ = "books"
+
+    id:         Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    title:      Mapped[str] = mapped_column(String(300))
+    filename:   Mapped[str] = mapped_column(String(300))
+    domain:     Mapped[str] = mapped_column(String(32), default="")
+    # queued → processing → ready | error  (a própria tabela funciona como fila)
+    status:     Mapped[str] = mapped_column(String(16), default="queued", index=True)
+    progress:   Mapped[float] = mapped_column(Float, default=0.0)
+    error:      Mapped[str] = mapped_column(Text, default="")
+    pages:      Mapped[int] = mapped_column(Integer, default=0)
+    toc:        Mapped[list] = mapped_column(JSON, default=list)   # [[nível, título, página], ...]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    chunks: Mapped[list["Chunk"]] = relationship(
+        back_populates="book", cascade="all, delete-orphan", passive_deletes=True,
+    )
+
+
+class Chunk(Base):
+    """Trecho do livro. A coluna de busca textual (tsv) existe só no PostgreSQL (ver migração)."""
+
+    __tablename__ = "chunks"
+    __table_args__ = (Index("ix_chunks_book_seq", "book_id", "seq"),)
+
+    id:         Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    book_id:    Mapped[str] = mapped_column(ForeignKey("books.id", ondelete="CASCADE"), index=True)
+    seq:        Mapped[int] = mapped_column(Integer)
+    section:    Mapped[str] = mapped_column(Text, default="")    # "Cap. 3 › 3.2 Regra da cadeia"
+    page_start: Mapped[int] = mapped_column(Integer)
+    page_end:   Mapped[int] = mapped_column(Integer)
+    kind:       Mapped[str] = mapped_column(String(16), default="text")   # text | exercise
+    content:    Mapped[str] = mapped_column(Text)
+    embedding = mapped_column(Vector(config.EMBED_DIM).with_variant(JSON(), "sqlite"), nullable=True)
+
+    book: Mapped[Book] = relationship(back_populates="chunks")

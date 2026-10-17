@@ -41,3 +41,21 @@ def test_mistakes_are_deduplicated_and_ranked():
     db.delete_mistake(top[0]["id"])
     assert len(db.top_mistakes("en")) == 1
     assert len(db.top_mistakes("es")) == 1
+
+
+def test_mastery_moving_average_and_order():
+    db.record_mastery("math_ml", [("Regra da cadeia", 100)])
+    db.record_mastery("math_ml", [("regra da cadeia", 0), ("Autovalores", 80)])
+    m = db.get_mastery("math_ml")
+    assert [x["concept"] for x in m] == ["Regra da cadeia", "Autovalores"]  # mais fraco primeiro
+    assert m[0]["score"] == 60.0 and m[0]["attempts"] == 2                 # 0.6*100 + 0.4*0
+
+
+def test_answer_key_of_last_assistant_message():
+    s = db.create_session("math_ml", "Intermediário", "quiz")
+    db.add_message(s["id"], "assistant", "Calcule det(A)", answer_key="A.det() → -2")
+    assert db.last_answer_key(s["id"]) == "A.det() → -2"
+    db.add_message(s["id"], "user", "-2")
+    db.add_message(s["id"], "assistant", "Correto!")
+    assert db.last_answer_key(s["id"]) == ""
+    assert db.get_messages(s["id"])[0]["verified"] is True
