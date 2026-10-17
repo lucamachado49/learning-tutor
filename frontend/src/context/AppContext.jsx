@@ -59,6 +59,7 @@ export function AppProvider({ children }) {
     model:    'qwen2.5:7b',    // modelo do Ollama
     bookIds:  [],              // livros usados como base
     speechRate: 1.0,           // velocidade da voz do tutor
+    voiceBargeIn: false,       // interromper falando (exige fone; sem fone o eco interrompe)
   })
 
   // Ao trocar de domínio, ajusta o nível para um válido naquele domínio

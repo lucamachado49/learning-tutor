@@ -58,13 +58,14 @@ export class SentenceSplitter {
 
 // ── Fila de fala: sintetiza em paralelo, toca em ordem ────
 export class SpeechQueue {
-  constructor({ onStart, onIdle } = {}) {
+  constructor({ onStart, onIdle, onError } = {}) {
     this.items = []          // [{ promise: Promise<url> }]
     this.playing = false
     this.audio = null
     this.generation = 0      // invalida sínteses antigas após stop()
     this.onStart = onStart
     this.onIdle = onIdle
+    this.onError = onError
     this.language = 'en'
     this.speed = 1.0
   }
@@ -72,7 +73,10 @@ export class SpeechQueue {
   enqueue(text) {
     const gen = this.generation
     // Começa a sintetizar já: enquanto uma frase toca, a próxima fica pronta
-    const promise = fetchTTS(text, this.language, this.speed).catch(() => null)
+    const promise = fetchTTS(text, this.language, this.speed).catch(err => {
+      if (gen === this.generation) this.onError?.(`Falha na voz do tutor: ${err.message}`)
+      return null
+    })
     this.items.push({ promise, gen })
     if (!this.playing) this._next()
   }
@@ -96,10 +100,23 @@ export class SpeechQueue {
     }
     this.onStart?.()
     this.audio = new Audio(url)
-    const done = () => { URL.revokeObjectURL(url); this.audio = null; this._next() }
+    let finished = false
+    const done = () => {
+      if (finished) return  // onerror e catch podem disparar juntos
+      finished = true
+      URL.revokeObjectURL(url)
+      this.audio = null
+      this._next()
+    }
     this.audio.onended = done
     this.audio.onerror = done
-    this.audio.play().catch(done)
+    this.audio.play().catch(err => {
+      // Ex.: política de autoplay do navegador
+      this.onError?.(err.name === 'NotAllowedError'
+        ? 'O navegador bloqueou o áudio. Clique em qualquer lugar da página e tente de novo.'
+        : `Não foi possível tocar o áudio: ${err.message}`)
+      done()
+    })
   }
 
   // Barge-in: para tudo imediatamente

@@ -1,15 +1,15 @@
 // src/components/InputBar.jsx
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, Mic, MicOff, Loader2, AlertCircle, Map, PenLine, Stethoscope, Library, Headphones, PhoneOff } from 'lucide-react'
-import { useVoiceMode } from '../hooks/useVoiceMode'
+import { useVoice } from '../hooks/useVoiceMode'
 
 const VOICE_STATUS = {
   loading:      { text: 'Carregando detector de voz…',            dot: 'bg-neutral-400' },
   listening:    { text: 'Ouvindo — pode falar',                   dot: 'bg-emerald-500 animate-pulse' },
   userSpeaking: { text: 'Você está falando…',                     dot: 'bg-emerald-500 animate-ping' },
   transcribing: { text: 'Transcrevendo…',                         dot: 'bg-sky-500 animate-pulse' },
-  thinking:     { text: 'Pensando… (fale para interromper)',      dot: 'bg-amber-500 animate-pulse' },
-  speaking:     { text: 'Tutor falando — fale para interromper',  dot: 'bg-violet-500 animate-pulse' },
+  thinking:     { text: 'Pensando…',                              dot: 'bg-amber-500 animate-pulse' },
+  speaking:     { text: 'Tutor falando…',                         dot: 'bg-violet-500 animate-pulse' },
 }
 
 const QUICK_ACTIONS = [
@@ -25,7 +25,7 @@ import { transcribeAudio } from '../lib/api'
 export default function InputBar() {
   const { isStreaming, settings, currentSession, createSession, health, backendOnline, setLibraryOpen } = useApp()
   const { sendMessage } = useChat()
-  const voice = useVoiceMode()
+  const voice = useVoice()
   const {
     isRecording, audioBlob, durationSec, error: recError,
     startRecording, stopRecording, reset: resetRecorder,
@@ -114,6 +114,8 @@ export default function InputBar() {
 
   const langInfo = LANGUAGES[settings.language]
 
+  if (voice.active && !voice.showText) return null
+
   return (
     <div className="border-t border-neutral-200 bg-white px-4 py-3">
       <div className="max-w-3xl mx-auto">
@@ -155,8 +157,18 @@ export default function InputBar() {
                 · resposta em {(voice.latency / 1000).toFixed(1)} s
               </span>
             )}
+            {(voice.state === 'speaking' || voice.state === 'thinking') && (
+              <button onClick={voice.interrupt}
+                      className="ml-auto px-2 py-1 rounded-lg text-neutral-600 hover:bg-neutral-100">
+                Interromper
+              </button>
+            )}
+            <button onClick={() => voice.setShowText(false)}
+                    className={`${voice.state === 'speaking' || voice.state === 'thinking' ? '' : 'ml-auto '}px-2 py-1 rounded-lg text-neutral-600 hover:bg-neutral-100`}>
+              Voltar ao modo voz
+            </button>
             <button onClick={voice.stop}
-                    className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-red-600 hover:bg-red-50">
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-red-600 hover:bg-red-50">
               <PhoneOff className="w-3 h-3" /> Encerrar
             </button>
           </div>

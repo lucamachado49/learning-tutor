@@ -15,6 +15,8 @@ export default {
         fadeIn:  { from: { opacity: 0 }, to: { opacity: 1 } },
         slideUp: { from: { opacity: 0, transform: 'translateY(6px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
         blink:   { '0%,100%': { opacity: 1 }, '50%': { opacity: 0 } },
+        // círculo do modo voz
+        breathe: { '0%,100%': { transform: 'scale(0.92)' }, '50%': { transform: 'scale(1.08)' } },
       },
     },
   },

@@ -3,6 +3,8 @@ import { useEffect, useRef } from 'react'
 import { MessageSquare } from 'lucide-react'
 import { LANGUAGES, MODES, useApp } from '../context/AppContext'
 import MessageItem from './MessageItem'
+import VoicePanel from './VoicePanel'
+import { useVoice } from '../hooks/useVoiceMode'
 
 function EmptyState({ language, level, mode }) {
   const lang = LANGUAGES[language]
@@ -26,11 +28,16 @@ function EmptyState({ language, level, mode }) {
 export default function ChatArea() {
   const { messages, currentSession, settings } = useApp()
   const bottomRef = useRef(null)
+  const voice = useVoice()
 
   // Auto-scroll suave a cada nova mensagem / token
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  if (voice.active && !voice.showText) {
+    return <VoicePanel onShowText={() => voice.setShowText(true)} />
+  }
 
   return (
     <div className="flex-1 overflow-y-auto">

@@ -125,6 +125,19 @@ export default function SettingsModal() {
             <p className="mt-1 text-xs text-neutral-400">Mais devagar ajuda no início do aprendizado de um idioma.</p>
           </div>
 
+          {/* Interromper falando */}
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" checked={settings.voiceBargeIn}
+                   onChange={e => update('voiceBargeIn', e.target.checked)}
+                   className="mt-0.5 accent-neutral-900" />
+            <span>
+              <span className="block text-sm text-neutral-800">Interromper o tutor falando</span>
+              <span className="block text-xs text-neutral-400">
+                Só com fone de ouvido. Sem fone, o microfone capta a voz do tutor e ele se interrompe sozinho.
+              </span>
+            </span>
+          </label>
+
           {/* Provedor LLM */}
           <div>
             <Label>Inteligência (LLM)</Label>
