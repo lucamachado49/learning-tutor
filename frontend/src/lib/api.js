@@ -232,3 +232,24 @@ export async function setSessionBooks(sessionId, bookIds) {
   if (!r.ok) throw new Error('Erro ao vincular livros')
   return r.json()
 }
+
+// ── Pronúncia ─────────────────────────────────────────────
+export async function getDrills(language) {
+  const r = await fetch(`${BASE}/pronunciation/drills?language=${encodeURIComponent(language)}`)
+  if (!r.ok) return []
+  return r.json()
+}
+
+export async function assessPronunciation(audioBlob, reference, language) {
+  const form = new FormData()
+  const ext = audioBlob.type.includes('ogg') ? 'ogg' : audioBlob.type.includes('wav') ? 'wav' : 'webm'
+  form.append('audio', audioBlob, `reading.${ext}`)
+  form.append('reference', reference)
+  form.append('language', language)
+  const r = await fetch(`${BASE}/pronunciation`, { method: 'POST', body: form })
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail ?? 'Avaliação falhou')
+  }
+  return r.json()
+}

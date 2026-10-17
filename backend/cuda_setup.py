@@ -1,21 +1,39 @@
 """
-cuda_setup.py — Torna as DLLs do CUDA instaladas via pip visíveis no Windows.
+cuda_setup.py — Garante UMA única cópia das DLLs do CUDA/cuDNN no processo (Windows).
 
-O faster-whisper (CTranslate2) precisa de cuBLAS e cuDNN. Instalados pelos pacotes
-nvidia-cublas-cu12 / nvidia-cudnn-cu12, eles ficam em site-packages/nvidia/*/bin,
-fora do caminho de busca de DLLs. Importar este módulo antes do faster_whisper resolve.
+O faster-whisper (CTranslate2) carrega cuBLAS/cuDNN pelo nome ("cudnn64_9.dll"), e o
+Windows reaproveita a primeira DLL já carregada com esse nome. Misturar duas versões do
+cuDNN no mesmo processo quebra um dos lados (símbolos ausentes, WinError 127).
+
+  • Com PyTorch instalado (avaliação de pronúncia): importa o torch primeiro; ele carrega as
+    próprias DLLs (torch/lib) e o Whisper passa a usar essas mesmas.
+  • Sem PyTorch: usa as DLLs dos pacotes pip nvidia-cublas-cu12 / nvidia-cudnn-cu12.
+
+Importar este módulo antes do faster_whisper.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
 
+log = logging.getLogger("tutor.cuda")
 
-def register_cuda_dlls() -> list[str]:
-    if sys.platform != "win32":
-        return []
+
+def _use_torch_dlls() -> bool:
+    try:
+        import torch  # noqa: F401  (carrega torch/lib/*.dll)
+    except ImportError:
+        return False
+    lib = Path(torch.__file__).parent / "lib"
+    if lib.is_dir():
+        os.environ["PATH"] = str(lib) + os.pathsep + os.environ.get("PATH", "")
+    return True
+
+
+def _use_nvidia_pip_dlls() -> list[str]:
     added = []
     for site in map(Path, sys.path):
         nvidia = site / "nvidia"
@@ -29,4 +47,13 @@ def register_cuda_dlls() -> list[str]:
     return added
 
 
-register_cuda_dlls()
+def register_cuda_dlls() -> str:
+    if sys.platform != "win32":
+        return "n/a"
+    if _use_torch_dlls():
+        return "torch"
+    _use_nvidia_pip_dlls()
+    return "nvidia-pip"
+
+
+SOURCE = register_cuda_dlls()

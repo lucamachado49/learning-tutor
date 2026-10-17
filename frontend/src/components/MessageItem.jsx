@@ -1,12 +1,12 @@
 // src/components/MessageItem.jsx
 import { useState, useCallback } from 'react'
-import { ChevronDown, Volume2, Loader2, User, Bot, BookOpen, CheckCircle2 } from 'lucide-react'
+import { ChevronDown, Volume2, Loader2, User, Bot, BookOpen, CheckCircle2, AudioLines } from 'lucide-react'
 import { LANGUAGES, useApp } from '../context/AppContext'
 import { fetchTTS } from '../lib/api'
 import Markdown, { visiblePart } from './Markdown'
 
 export default function MessageItem({ message }) {
-  const { settings } = useApp()
+  const { settings, setPronunciation } = useApp()
   const { role, content, feedback, streaming, isError, provider, citations, verified } = message
   const [citesOpen, setCitesOpen] = useState(false)
 
@@ -101,6 +101,17 @@ export default function MessageItem({ message }) {
                     : <Volume2 className="w-3 h-3" />
                   }
                   Ouvir
+                </button>
+              )}
+
+              {/* Treinar a pronúncia desta resposta */}
+              {LANGUAGES[settings.language]?.kind === 'language' && (
+                <button
+                  onClick={() => setPronunciation({ text: content })}
+                  title="Leia esta resposta em voz alta e receba nota de pronúncia"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-neutral-400 border border-neutral-200 hover:text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50 transition-all"
+                >
+                  <AudioLines className="w-3 h-3" /> Praticar pronúncia
                 </button>
               )}
 

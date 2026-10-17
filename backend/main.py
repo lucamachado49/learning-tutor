@@ -38,6 +38,8 @@ import library
 import llm
 import tts
 import verifier
+import drills
+import pronunciation
 from domains import ACTIONS, DEFAULT_DOMAIN, DOMAINS, MODES, get_domain
 from logging_setup import setup_logging
 
@@ -91,7 +93,8 @@ def _get_whisper() -> Optional["WhisperModel"]:
 
 
 def _warm_whisper() -> None:
-    _get_whisper()  # carrega, valida o dispositivo e aquece
+    _get_whisper()          # carrega, valida o dispositivo e aquece
+    pronunciation.warm()    # modelo de fonemas (avaliação de pronúncia)
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +264,7 @@ async def health():
         "whisper": WHISPER_AVAILABLE,
         "tts": tts.status(),
         "database": await asyncio.to_thread(db.ping),
+        "pronunciation": pronunciation.available(),
     }
 
 
@@ -568,6 +572,61 @@ async def transcribe(
         tmp_path.unlink(missing_ok=True)
 
     return {"transcript": text}
+
+
+# ---------------------------------------------------------------------------
+# Pronúncia
+# ---------------------------------------------------------------------------
+@app.get("/api/pronunciation/drills")
+def pronunciation_drills(language: str = DEFAULT_DOMAIN):
+    return drills.drills_for(get_domain(language).speech_lang)
+
+
+@app.post("/api/pronunciation")
+async def assess_pronunciation(
+    audio: UploadFile = File(...),
+    reference: str = Form(...),
+    language: str = Form(DEFAULT_DOMAIN),
+):
+    """Compara a gravação com a frase de referência, som a som."""
+    if not pronunciation.available():
+        raise HTTPException(status_code=503, detail="Avaliação de pronúncia indisponível (instale torch e transformers).")
+    domain = get_domain(language)
+    if domain.speech_lang not in pronunciation.ESPEAK_LANG:
+        raise HTTPException(status_code=400, detail="Avaliação de pronúncia disponível para inglês e espanhol.")
+    if len(reference) > 400:
+        raise HTTPException(status_code=400, detail="Frase de referência longa demais (máx. 400 caracteres).")
+
+    data = await audio.read()
+    suffix = Path(audio.filename or "a.webm").suffix or ".webm"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(data)
+        tmp_path = Path(tmp.name)
+
+    def _run() -> dict:
+        from faster_whisper import decode_audio
+        samples = decode_audio(str(tmp_path), sampling_rate=16000)
+        if len(samples) < 16000 * 0.3:
+            raise ValueError("Gravação curta demais.")
+        return pronunciation.assess(samples, reference, domain.speech_lang)
+
+    try:
+        result = await asyncio.to_thread(_run)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        log.exception("Avaliação de pronúncia falhou")
+        raise HTTPException(status_code=500, detail=f"Avaliação falhou: {exc}")
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    # Sons difíceis entram no mapa de domínio (acertou → 100, errou → 0)
+    tips = pronunciation.TIPS_EN if domain.speech_lang == "en" else pronunciation.TIPS_ES
+    assessed = {p["expected"] for w in result["words"] for p in w["phones"]} & set(tips)
+    weak = set(result["weak_sounds"])
+    if assessed:
+        db.record_mastery(domain.id, [(f"pronúncia /{s}/", 0.0 if s in weak else 100.0) for s in sorted(assessed)])
+    return result
 
 
 @app.post("/api/tts")

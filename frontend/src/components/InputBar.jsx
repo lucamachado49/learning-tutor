@@ -1,6 +1,6 @@
 // src/components/InputBar.jsx
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Mic, MicOff, Loader2, AlertCircle, Map, PenLine, Stethoscope, Library, Headphones, PhoneOff } from 'lucide-react'
+import { ArrowUp, Mic, MicOff, Loader2, AlertCircle, Map, PenLine, Stethoscope, Library, Headphones, PhoneOff, AudioLines } from 'lucide-react'
 import { useVoice } from '../hooks/useVoiceMode'
 
 const VOICE_STATUS = {
@@ -23,7 +23,7 @@ import { useAudioRecorder } from '../hooks/useAudioRecorder'
 import { transcribeAudio } from '../lib/api'
 
 export default function InputBar() {
-  const { isStreaming, settings, currentSession, createSession, health, backendOnline, setLibraryOpen } = useApp()
+  const { isStreaming, settings, currentSession, createSession, health, backendOnline, setLibraryOpen, setPronunciation } = useApp()
   const { sendMessage } = useChat()
   const voice = useVoice()
   const {
@@ -192,6 +192,15 @@ export default function InputBar() {
               <a.icon className="w-3 h-3" /> {a.label}
             </button>
           ))}
+          {langInfo?.kind === 'language' && health.pronunciation && (
+            <button
+              onClick={() => setPronunciation({ text: '' })}
+              title="Treine sons difíceis para brasileiros, com nota por som"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-neutral-600 border border-neutral-200 hover:bg-neutral-50 hover:border-neutral-300 transition-all"
+            >
+              <AudioLines className="w-3 h-3" /> Pronúncia
+            </button>
+          )}
           <button
             onClick={() => setLibraryOpen(true)}
             className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-neutral-500 hover:text-neutral-800 hover:bg-neutral-50 transition-all"

@@ -5,6 +5,7 @@ import ChatArea from './components/ChatArea'
 import InputBar from './components/InputBar'
 import SettingsModal from './components/SettingsModal'
 import LibraryModal from './components/LibraryModal'
+import PronunciationModal from './components/PronunciationModal'
 import { VoiceProvider } from './hooks/useVoiceMode'
 
 function AppLayout() {
@@ -26,6 +27,7 @@ function AppLayout() {
       {/* Modal de configurações (overlay) */}
       <SettingsModal />
       <LibraryModal />
+      <PronunciationModal />
     </div>
   )
 }

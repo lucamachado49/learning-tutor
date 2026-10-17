@@ -48,6 +48,8 @@ export function AppProvider({ children }) {
   const [sidebarOpen, setSidebarOpen]   = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [libraryOpen, setLibraryOpen]   = useState(false)
+  // Treino de pronúncia: null (fechado) ou { text } com a frase de origem (pode ser vazia)
+  const [pronunciation, setPronunciation] = useState(null)
   const [isStreaming, setIsStreaming]   = useState(false)
 
   // Configurações
@@ -221,6 +223,7 @@ export function AppProvider({ children }) {
       sidebarOpen, setSidebarOpen,
       settingsOpen, setSettingsOpen,
       libraryOpen, setLibraryOpen,
+      pronunciation, setPronunciation,
       isStreaming, setIsStreaming,
       // config
       settings, setSettings, setBookIds,

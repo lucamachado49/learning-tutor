@@ -164,6 +164,32 @@ Para conversar com fluidez (~2 s), adicione uma `GROQ_API_KEY` gratuita: na voz,
 > (já no `requirements.txt`). Sem GPU, o Whisper cai automaticamente para a CPU (`base`).
 > Use Chrome/Edge em `http://localhost:5173` e permita o microfone.
 
+### 🗣️ Pronúncia (nota por som, 100% local)
+
+- **Praticar pronúncia** (abaixo de cada resposta do tutor): escolha uma frase, ouça o modelo,
+  grave a sua leitura e veja a nota por palavra. Clique numa palavra para ver **som por som**
+  (ex.: `/θ/ → /s/`) e ouvir devagar.
+- **Pronúncia** (ação rápida): exercícios dos sons mais difíceis para brasileiros — th, ship × sheep,
+  h aspirado, r inglês, vogal extra no fim ("bigui"), "ispeak"; no espanhol: rr, jota, s × z,
+  vogais fechadas, l final. Inclui pares mínimos para ouvir a diferença.
+- Os sons avaliados entram no **mapa de domínio** (`pronúncia /θ/: 40`) e alimentam o Diagnóstico.
+
+Como funciona: o texto vira fonemas esperados (espeak); o modelo `wav2vec2-lv-60-espeak-cv-ft`
+reconhece os **sons** produzidos (não as palavras, então não "corrige" você como o Whisper);
+um alinhamento som a som aponta trocas, omissões e sons extras. Para as trocas típicas de
+brasileiros há uma segunda checagem por probabilidade (GOP) com a palavra isolada, porque em
+frases muito comuns ("I think it is…") o modelo tende a ouvir o som esperado. Variações
+naturais de nativo (flap "it is" → "idiz", formas reduzidas como "to" → "tə", consoantes que
+se juntam em "this seat") não contam como erro.
+
+Validação com leituras sintéticas certas e com erros típicos (2 vozes): no inglês, as leituras
+corretas saem com nota 100 e os erros θ→s, θ→t, ð→d, ɪ→iː e v→b são detectados (21/22 casos).
+O espanhol ainda não foi validado assim: as vozes sintéticas não vibram o "rr".
+
+> Requer PyTorch: `pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128`.
+> Use a versão cu128: ela traz o cuDNN 9.7, compatível com o Whisper no mesmo processo
+> (versões com cuDNN mais antigo derrubam o Whisper — ver `backend/cuda_setup.py`).
+
 ### Migrando conversas antigas (SQLite → PostgreSQL)
 ```powershell
 .venv\Scripts\python.exe backend\scripts\migrate_sqlite.py backend\tutor.db.bak
@@ -213,6 +239,8 @@ language/
 │   ├── migrations/         # Migrações Alembic
 │   ├── library.py          # Biblioteca: importação de PDF, embeddings, busca híbrida
 │   ├── verifier.py         # Gabaritos SymPy em sandbox
+│   ├── pronunciation.py    # Avaliação de pronúncia por fonemas (wav2vec2 + GOP)
+│   ├── drills.py           # Exercícios de sons difíceis para brasileiros
 │   ├── tts.py              # Kokoro / Piper
 │   └── tests/              # pytest
 ├── frontend/               # Interface React (Vite)
