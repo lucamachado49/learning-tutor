@@ -1,6 +1,16 @@
 // src/components/InputBar.jsx
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Mic, MicOff, Loader2, AlertCircle, Map, PenLine, Stethoscope, Library } from 'lucide-react'
+import { ArrowUp, Mic, MicOff, Loader2, AlertCircle, Map, PenLine, Stethoscope, Library, Headphones, PhoneOff } from 'lucide-react'
+import { useVoiceMode } from '../hooks/useVoiceMode'
+
+const VOICE_STATUS = {
+  loading:      { text: 'Carregando detector de voz…',            dot: 'bg-neutral-400' },
+  listening:    { text: 'Ouvindo — pode falar',                   dot: 'bg-emerald-500 animate-pulse' },
+  userSpeaking: { text: 'Você está falando…',                     dot: 'bg-emerald-500 animate-ping' },
+  transcribing: { text: 'Transcrevendo…',                         dot: 'bg-sky-500 animate-pulse' },
+  thinking:     { text: 'Pensando… (fale para interromper)',      dot: 'bg-amber-500 animate-pulse' },
+  speaking:     { text: 'Tutor falando — fale para interromper',  dot: 'bg-violet-500 animate-pulse' },
+}
 
 const QUICK_ACTIONS = [
   { id: 'roadmap',   label: 'Roadmap',     icon: Map,         hint: 'Plano de estudo baseado nos livros e no seu domínio' },
@@ -15,6 +25,7 @@ import { transcribeAudio } from '../lib/api'
 export default function InputBar() {
   const { isStreaming, settings, currentSession, createSession, health, backendOnline, setLibraryOpen } = useApp()
   const { sendMessage } = useChat()
+  const voice = useVoiceMode()
   const {
     isRecording, audioBlob, durationSec, error: recError,
     startRecording, stopRecording, reset: resetRecorder,
@@ -134,6 +145,28 @@ export default function InputBar() {
           </div>
         )}
 
+        {/* Modo conversa por voz */}
+        {voice.active && (
+          <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl bg-neutral-50 border border-neutral-200 text-xs text-neutral-700">
+            <span className={`w-2 h-2 rounded-full ${VOICE_STATUS[voice.state]?.dot}`} />
+            <span className="font-medium">{VOICE_STATUS[voice.state]?.text}</span>
+            {voice.latency != null && (
+              <span className="text-neutral-400" title="Do fim da sua fala até o início da resposta falada">
+                · resposta em {(voice.latency / 1000).toFixed(1)} s
+              </span>
+            )}
+            <button onClick={voice.stop}
+                    className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-red-600 hover:bg-red-50">
+              <PhoneOff className="w-3 h-3" /> Encerrar
+            </button>
+          </div>
+        )}
+        {voice.error && (
+          <div className="flex items-center gap-2 mb-2 text-xs text-red-500">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" /> <span>{voice.error}</span>
+          </div>
+        )}
+
         {/* Ações rápidas */}
         <div className="flex flex-wrap items-center gap-1.5 mb-2">
           {QUICK_ACTIONS.map(a => (
@@ -181,6 +214,18 @@ export default function InputBar() {
               disabled:opacity-50 disabled:cursor-not-allowed
             "
           />
+
+          {/* Modo conversa (voz contínua) */}
+          {langHasSTT && !voice.active && (
+            <button
+              onClick={voice.start}
+              disabled={isStreaming || isRecording}
+              title="Modo conversa: fale naturalmente, sem apertar botões"
+              className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 transition-all"
+            >
+              <Headphones className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Botão microfone */}
           {langHasSTT && (

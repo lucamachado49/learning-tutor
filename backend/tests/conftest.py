@@ -27,7 +27,7 @@ class FakeProvider(llm.LLMProvider):
     def configured(self):
         return self._configured
 
-    async def stream(self, messages, temperature):
+    async def stream(self, messages, temperature, fast=False):
         self.calls += 1
         if self._error and self._fail_after is None:
             raise self._error
@@ -43,4 +43,5 @@ def fake_llm(monkeypatch):
     def install(*providers, order=None):
         monkeypatch.setattr(llm, "PROVIDERS", {p.name: p for p in providers})
         monkeypatch.setattr(llm.config, "LLM_ORDER", order or [p.name for p in providers])
+        monkeypatch.setattr(llm.config, "VOICE_LLM_ORDER", order or [p.name for p in providers])
     return install

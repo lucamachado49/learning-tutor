@@ -1,7 +1,7 @@
 // src/hooks/useChat.js
 // Hook que gerencia o envio de mensagens e o consumo do SSE.
 
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useApp } from '../context/AppContext'
 import * as api from '../lib/api'
 
@@ -16,7 +16,20 @@ export function useChat() {
     updateSessionTitle,
   } = useApp()
 
-  const sendMessage = useCallback(async (text, action = null) => {
+  const abortRef = useRef(null)
+
+  // Interrompe a resposta em andamento (barge-in do modo voz)
+  const stopStreaming = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    updateLastMessage(msg => msg.streaming
+      ? { ...msg, content: msg.content + ' …(interrompido)', streaming: false }
+      : msg)
+    setIsStreaming(false)
+  }, [updateLastMessage, setIsStreaming])
+
+  // hooks = { onText(textoAcumulado), onDone(resultado) } — usado pelo modo voz
+  const sendMessage = useCallback(async (text, action = null, hooks = {}) => {
     if (!text.trim()) return
 
     // Se não houver sessão ativa, cria uma nova
@@ -54,7 +67,12 @@ export function useChat() {
       updateSessionTitle(session.id, title)
     }
 
+    const controller = new AbortController()
+    abortRef.current = controller
+    let acc = ''
+
     await api.streamChat({
+      signal:    controller.signal,
       sessionId: session.id,
       message:   text.trim(),
       domain:      settings.language,
@@ -63,8 +81,11 @@ export function useChat() {
       provider:    settings.provider,
       ollamaModel: settings.model,
       action,
+      fast:        Boolean(hooks.fast),
 
       onToken: (token) => {
+        acc += token
+        hooks.onText?.(acc)
         // Acumula tokens no placeholder
         updateLastMessage(msg => ({
           ...msg,
@@ -85,6 +106,8 @@ export function useChat() {
           streaming: false,
         }))
         setIsStreaming(false)
+        abortRef.current = null
+        hooks.onDone?.({ message, feedback })
       },
 
       onError: (error) => {
@@ -95,9 +118,11 @@ export function useChat() {
           isError:  true,
         }))
         setIsStreaming(false)
+        abortRef.current = null
+        hooks.onDone?.({ message: '', feedback: '', error })
       },
     })
   }, [currentSession, settings, addMessage, updateLastMessage, setIsStreaming, createSession, updateSessionTitle])
 
-  return { sendMessage }
+  return { sendMessage, stopStreaming }
 }

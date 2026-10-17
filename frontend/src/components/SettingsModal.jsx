@@ -113,6 +113,18 @@ export default function SettingsModal() {
             </div>
           </div>
 
+          {/* Velocidade da voz */}
+          <div>
+            <Label>Velocidade da voz do tutor — {settings.speechRate.toFixed(2)}×</Label>
+            <input
+              type="range" min="0.7" max="1.3" step="0.05"
+              value={settings.speechRate}
+              onChange={e => update('speechRate', Number(e.target.value))}
+              className="w-full accent-neutral-900"
+            />
+            <p className="mt-1 text-xs text-neutral-400">Mais devagar ajuda no início do aprendizado de um idioma.</p>
+          </div>
+
           {/* Provedor LLM */}
           <div>
             <Label>Inteligência (LLM)</Label>

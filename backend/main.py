@@ -22,6 +22,7 @@ import json
 import logging
 import re
 import tempfile
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator, Optional
@@ -43,6 +44,8 @@ from logging_setup import setup_logging
 setup_logging()
 log = logging.getLogger("tutor")
 
+import cuda_setup  # noqa: F401  (registra DLLs do CUDA antes do faster_whisper)
+
 try:
     from faster_whisper import WhisperModel  # type: ignore
     WHISPER_AVAILABLE = True
@@ -55,6 +58,7 @@ except ImportError:
 # Whisper STT (singleton com lazy loading)
 # ---------------------------------------------------------------------------
 _whisper_model: Optional["WhisperModel"] = None
+_whisper_lock = threading.Lock()
 
 
 def _get_whisper() -> Optional["WhisperModel"]:
@@ -62,19 +66,32 @@ def _get_whisper() -> Optional["WhisperModel"]:
     if _whisper_model is not None or not WHISPER_AVAILABLE:
         return _whisper_model
 
-    for device, ctype, size in [
-        ("cuda", "float16", config.WHISPER_MODEL_GPU),
-        ("cpu", "int8", config.WHISPER_MODEL_CPU),
-    ]:
-        try:
-            _whisper_model = WhisperModel(size, device=device, compute_type=ctype)
-            log.info(f"Whisper carregado: {size} device={device}, compute={ctype}")
+    import numpy as np
+
+    with _whisper_lock:  # aquecimento e requisições podem chegar juntos
+        if _whisper_model is not None:
             return _whisper_model
-        except Exception as exc:
-            log.warning(f"Whisper ({device}) falhou: {exc}")
+        for device, ctype, size in [
+            ("cuda", "float16", config.WHISPER_MODEL_GPU),
+            ("cpu", "int8", config.WHISPER_MODEL_CPU),
+        ]:
+            try:
+                model = WhisperModel(size, device=device, compute_type=ctype)
+                # A GPU pode "carregar" e só falhar na inferência (ex.: DLL do cuBLAS ausente);
+                # uma inferência curta valida o dispositivo e já aquece os kernels.
+                list(model.transcribe(np.zeros(16000, dtype=np.float32), language="en")[0])
+                _whisper_model = model
+                log.info(f"Whisper pronto: {size} device={device}, compute={ctype}")
+                return _whisper_model
+            except Exception as exc:
+                log.warning(f"Whisper ({device}) falhou: {exc}")
 
     log.error("Não foi possível carregar o Whisper.")
     return None
+
+
+def _warm_whisper() -> None:
+    _get_whisper()  # carrega, valida o dispositivo e aquece
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +194,8 @@ class ChatRequest(BaseModel):
     ollama_model: Optional[str] = None
     # Ação rápida da interface: roadmap | exercise | diagnosis
     action:       Optional[str] = None
+    # Turno de conversa por voz: prioriza latência
+    fast:         bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +205,8 @@ class ChatRequest(BaseModel):
 async def lifespan(app: FastAPI):
     _run_migrations()
     db.init_engine()
-    _get_whisper()
+    # Carrega e aquece o Whisper em segundo plano (a 1ª inferência na GPU compila kernels)
+    asyncio.create_task(asyncio.to_thread(_warm_whisper))
     worker = asyncio.create_task(library.worker_loop())
     yield
     worker.cancel()
@@ -341,6 +361,12 @@ async def chat_stream(req: ChatRequest):
             "Compare a resposta do aluno com o gabarito. Se divergir, a resposta está ERRADA: "
             "aponte exatamente onde está o erro, sem elogiar o resultado incorreto."
         )
+    if req.fast and not action:
+        system += (
+            "\n\nCONVERSA POR VOZ: o aluno está falando com você em tempo real. A [MENSAGEM] deve "
+            "ser curta e natural como numa conversa (2 a 3 frases, sem listas nem markdown), "
+            "terminando com uma pergunta. Detalhes ficam no [FEEDBACK PEDAGÓGICO]."
+        )
     api_messages = [{"role": "system", "content": system}]
     for row in history:
         content = row["content"]
@@ -353,7 +379,8 @@ async def chat_stream(req: ChatRequest):
     async def _generate() -> AsyncGenerator[str, None]:
         full_text, provider = "", ""
         try:
-            async for ev in llm.stream_chat(api_messages, req.provider, req.ollama_model):
+            async for ev in llm.stream_chat(api_messages, req.provider, req.ollama_model,
+                                            fast=req.fast and not action):
                 full_text += ev.token
                 provider = ev.provider
                 yield f"data: {json.dumps({'token': ev.token, 'done': False, 'provider': provider})}\n\n"
@@ -379,6 +406,13 @@ async def chat_stream(req: ChatRequest):
             }
             yield f"data: {json.dumps(final)}\n\n"
 
+        except (asyncio.CancelledError, GeneratorExit):
+            # Cliente desconectou (ex.: aluno interrompeu por voz): guarda o que foi dito.
+            # GeneratorExit: o gerador estava parado num yield quando foi fechado.
+            if full_text.strip():
+                message, feedback, _ = _parse_response(full_text)
+                db.add_message(req.session_id, "assistant", message + " …(interrompido)", feedback, provider)
+            raise
         except Exception as exc:
             log.exception("Erro no streaming")
             yield f"data: {json.dumps({'error': str(exc), 'done': True})}\n\n"

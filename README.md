@@ -145,6 +145,25 @@ com Reciprocal Rank Fusion — funciona com perguntas em português sobre livros
 > Limitação atual: PDFs escaneados (imagem) precisam de OCR, e fórmulas complexas podem sair
 > imperfeitas na extração.
 
+### 🎧 Modo conversa (voz em tempo real)
+
+Clique no ícone de **fone** na caixa de mensagem e fale naturalmente — sem apertar botões:
+
+- O **detector de voz (Silero VAD)** roda no navegador e percebe quando você começa e termina de falar.
+- Sua fala vai para o **Whisper `large-v3-turbo` na GPU** (~0,4 s por frase).
+- A resposta é **falada frase a frase enquanto ainda está sendo gerada** (Kokoro TTS).
+- **Fale por cima do tutor para interrompê-lo** — ele para na hora e a parte já dita fica no histórico.
+- Nos turnos de voz o tutor responde curto (2–3 frases); correções detalhadas ficam no Feedback.
+- Velocidade da voz ajustável em Configurações (útil no começo de um idioma).
+
+Latência medida (do fim da sua fala ao início da resposta falada): **~5–8 s com Gemini**.
+Para conversar com fluidez (~2 s), adicione uma `GROQ_API_KEY` gratuita: na voz, a ordem é
+`VOICE_LLM_ORDER=groq,gemini,ollama` e o raciocínio longo do Gemini é desligado.
+
+> GPU no Windows: as DLLs do CUDA vêm dos pacotes `nvidia-cublas-cu12` e `nvidia-cudnn-cu12`
+> (já no `requirements.txt`). Sem GPU, o Whisper cai automaticamente para a CPU (`base`).
+> Use Chrome/Edge em `http://localhost:5173` e permita o microfone.
+
 ### Migrando conversas antigas (SQLite → PostgreSQL)
 ```powershell
 .venv\Scripts\python.exe backend\scripts\migrate_sqlite.py backend\tutor.db.bak

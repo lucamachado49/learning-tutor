@@ -40,7 +40,10 @@ class LLMProvider:
     def model_name(self) -> str:
         return ""
 
-    async def stream(self, messages: list[dict], temperature: float) -> AsyncGenerator[str, None]:
+    async def stream(
+        self, messages: list[dict], temperature: float, fast: bool = False,
+    ) -> AsyncGenerator[str, None]:
+        """fast=True: prioriza latência (ex.: conversa por voz) em vez de raciocínio longo."""
         raise NotImplementedError
         yield  # pragma: no cover
 
@@ -64,7 +67,19 @@ class GeminiProvider(LLMProvider):
     def model_name(self) -> str:
         return config.GEMINI_MODEL
 
-    async def stream(self, messages, temperature):
+    async def stream(self, messages, temperature, fast=False):
+        try:
+            async for token in self._stream(messages, temperature, fast):
+                yield token
+        except ProviderUnavailable as exc:
+            # Nem todo modelo aceita desligar o raciocínio: tenta de novo no modo normal
+            if fast and "HTTP 400" in str(exc):
+                async for token in self._stream(messages, temperature, False):
+                    yield token
+            else:
+                raise
+
+    async def _stream(self, messages, temperature, fast):
         system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
         contents = [
             {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
@@ -74,6 +89,9 @@ class GeminiProvider(LLMProvider):
             "contents": contents,
             "generationConfig": {"temperature": temperature},
         }
+        if fast:
+            # Sem "pensar" antes de responder: 1º token ~2x mais rápido
+            payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 0}
         if system:
             payload["systemInstruction"] = {"parts": [{"text": system}]}
 
@@ -106,7 +124,7 @@ class GroqProvider(LLMProvider):
     def model_name(self) -> str:
         return config.GROQ_MODEL
 
-    async def stream(self, messages, temperature):
+    async def stream(self, messages, temperature, fast=False):
         payload = {
             "model": config.GROQ_MODEL,
             "messages": messages,
@@ -149,7 +167,7 @@ class OllamaProvider(LLMProvider):
         except Exception:
             return None
 
-    async def stream(self, messages, temperature):
+    async def stream(self, messages, temperature, fast=False):
         payload = {
             "model": self.model,
             "messages": messages,
@@ -184,12 +202,19 @@ async def stream_chat(
     provider: str = "auto",
     ollama_model: Optional[str] = None,
     temperature: float = config.LLM_TEMPERATURE,
+    fast: bool = False,
 ) -> AsyncGenerator[StreamEvent, None]:
-    """Faz streaming com o provedor pedido ou, em "auto", com fallback em ordem."""
+    """Faz streaming com o provedor pedido ou, em "auto", com fallback em ordem.
+
+    fast=True (conversa por voz) usa a ordem VOICE_LLM_ORDER e desliga o raciocínio longo.
+    """
     if ollama_model:
         PROVIDERS["ollama"].model = ollama_model  # type: ignore[attr-defined]
 
-    order = config.LLM_ORDER if provider == "auto" else [provider]
+    if provider != "auto":
+        order = [provider]
+    else:
+        order = config.VOICE_LLM_ORDER if fast else config.LLM_ORDER
     errors: list[str] = []
 
     for name in order:
@@ -202,7 +227,7 @@ async def stream_chat(
 
         started = False
         try:
-            async for token in prov.stream(messages, temperature):
+            async for token in prov.stream(messages, temperature, fast):
                 started = True
                 yield StreamEvent(prov.name, token)
             if started:

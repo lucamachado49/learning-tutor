@@ -58,7 +58,7 @@ export async function deleteSession(sessionId) {
  * @param {function} params.onDone    - callback({message, feedback, message_id})
  * @param {function} params.onError   - callback(error: string)
  */
-export async function streamChat({ sessionId, message, domain, level, mode, provider, ollamaModel, action, onToken, onDone, onError }) {
+export async function streamChat({ sessionId, message, domain, level, mode, provider, ollamaModel, action, fast = false, signal, onToken, onDone, onError }) {
   let response
   try {
     response = await fetch(`${BASE}/chat/stream`, {
@@ -73,9 +73,12 @@ export async function streamChat({ sessionId, message, domain, level, mode, prov
         provider,
         ollama_model: ollamaModel,
         action,
+        fast,
       }),
+      signal,
     })
-  } catch {
+  } catch (err) {
+    if (err.name === 'AbortError') return
     onError('Não foi possível conectar ao backend. Execute: .\start_backend.ps1')
     return
   }
@@ -91,7 +94,14 @@ export async function streamChat({ sessionId, message, domain, level, mode, prov
 
   try {
     while (true) {
-      const { done, value } = await reader.read()
+      let chunk
+      try {
+        chunk = await reader.read()
+      } catch (err) {
+        if (err.name === 'AbortError') return  // interrompido pelo aluno
+        throw err
+      }
+      const { done, value } = chunk
       if (done) break
 
       buffer += decoder.decode(value, { stream: true })
@@ -133,9 +143,9 @@ export async function streamChat({ sessionId, message, domain, level, mode, prov
 }
 
 // ── STT ───────────────────────────────────────────────────
-export async function transcribeAudio(audioBlob, language) {
+export async function transcribeAudio(audioBlob, language, filename = 'recording.webm') {
   const form = new FormData()
-  form.append('audio', audioBlob, 'recording.webm')
+  form.append('audio', audioBlob, filename)
   form.append('language', language)
   const r = await fetch(`${BASE}/transcribe`, { method: 'POST', body: form })
   if (!r.ok) {
@@ -150,10 +160,11 @@ export async function transcribeAudio(audioBlob, language) {
  * Solicita síntese de voz e retorna uma ObjectURL para o áudio WAV.
  * Atenção: chame URL.revokeObjectURL(url) quando não for mais necessário.
  */
-export async function fetchTTS(text, language) {
+export async function fetchTTS(text, language, speed = 1.0) {
   const form = new FormData()
   form.append('text', text)
   form.append('language', language)
+  form.append('speed', String(speed))
   const r = await fetch(`${BASE}/tts`, { method: 'POST', body: form })
   if (!r.ok) {
     const err = await r.json().catch(() => ({}))

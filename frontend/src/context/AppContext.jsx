@@ -58,6 +58,7 @@ export function AppProvider({ children }) {
     provider: 'auto',
     model:    'qwen2.5:7b',    // modelo do Ollama
     bookIds:  [],              // livros usados como base
+    speechRate: 1.0,           // velocidade da voz do tutor
   })
 
   // Ao trocar de domínio, ajusta o nível para um válido naquele domínio

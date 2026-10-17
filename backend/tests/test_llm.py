@@ -43,3 +43,12 @@ async def test_explicit_provider_ignores_order(fake_llm):
     fake_llm(a, b)
     events = await _collect(provider="b")
     assert [e.token for e in events] == ["B"]
+
+
+async def test_fast_mode_uses_voice_order(fake_llm, monkeypatch):
+    a = FakeProvider("a", tokens=["lento"])
+    b = FakeProvider("b", tokens=["rápido"])
+    fake_llm(a, b, order=["a", "b"])
+    monkeypatch.setattr(llm.config, "VOICE_LLM_ORDER", ["b", "a"])
+    assert [e.token for e in await _collect(fast=True)] == ["rápido"]
+    assert [e.token for e in await _collect()] == ["lento"]

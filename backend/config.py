@@ -24,6 +24,8 @@ def _env(key: str, default: str = "") -> str:
 # Ordem de tentativa no modo "auto"; provedores sem chave são pulados.
 LLM_ORDER = [p.strip() for p in _env("LLM_ORDER", "gemini,groq,ollama").split(",") if p.strip()]
 LLM_TEMPERATURE = float(_env("LLM_TEMPERATURE", "0.6"))
+# Conversa por voz: latência importa mais (Groq responde em ~0,3 s)
+VOICE_LLM_ORDER = [p.strip() for p in _env("VOICE_LLM_ORDER", "groq,gemini,ollama").split(",") if p.strip()]
 
 GEMINI_API_KEY = _env("GEMINI_API_KEY")
 GEMINI_MODEL   = _env("GEMINI_MODEL", "gemini-flash-latest")  # alias: sempre o Flash atual
@@ -38,7 +40,7 @@ OLLAMA_MODEL    = _env("OLLAMA_MODEL", "qwen2.5:7b")
 HISTORY_LIMIT = int(_env("HISTORY_LIMIT", "20"))
 
 # --- STT ---------------------------------------------------------------
-WHISPER_MODEL_GPU = _env("WHISPER_MODEL_GPU", "small")
+WHISPER_MODEL_GPU = _env("WHISPER_MODEL_GPU", "large-v3-turbo")  # ~0,4 s por frase numa RTX 4050
 WHISPER_MODEL_CPU = _env("WHISPER_MODEL_CPU", "base")
 
 # --- TTS ---------------------------------------------------------------
