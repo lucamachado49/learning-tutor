@@ -1,0 +1,10 @@
+.env
+.venv/
+node_modules/
+frontend/dist/
+models/
+backend/tutor.db
+__pycache__/
+.claude/
+*.log
+.pytest_cache/

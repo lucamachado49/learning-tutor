@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  color: #0a0a0a;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar minimalista ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d4d4d4; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #a3a3a3; }
+
+/* ── Cursor piscando no streaming ── */
+.streaming-cursor::after {
+  content: '▍';
+  display: inline-block;
+  animation: blink 0.8s step-end infinite;
+  color: #a3a3a3;
+  margin-left: 1px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* ── Prose: quebra de linha preservada nas respostas ── */
+.message-content { white-space: pre-wrap; word-break: break-word; }
+
+/* ── Textarea sem resize manual ── */
+textarea { resize: none; }
+
+/* ── Focus ring personalizado ── */
+*:focus-visible {
+  outline: 2px solid #a3a3a3;
+  outline-offset: 2px;
+}
+
+/* ── Markdown das respostas ── */
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p, .markdown ul, .markdown ol, .markdown pre, .markdown table { margin: 0.5em 0; }
+.markdown ul { list-style: disc; padding-left: 1.4em; }
+.markdown ol { list-style: decimal; padding-left: 1.4em; }
+.markdown h1, .markdown h2, .markdown h3 { font-weight: 600; margin: 0.8em 0 0.3em; }
+.markdown code { background: #f5f5f5; border-radius: 4px; padding: 0.1em 0.35em; font-size: 0.9em; }
+.markdown pre { background: #171717; color: #f5f5f5; border-radius: 10px; padding: 0.8em 1em; overflow-x: auto; }
+.markdown pre code { background: transparent; padding: 0; color: inherit; }
+.markdown table { border-collapse: collapse; }
+.markdown th, .markdown td { border: 1px solid #e5e5e5; padding: 0.3em 0.6em; }
+.markdown .katex-display { overflow-x: auto; overflow-y: hidden; }
