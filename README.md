@@ -137,8 +137,17 @@ Ações rápidas acima da caixa de texto:
 - **Diagnóstico** — pontos fortes e lacunas a partir do **mapa de domínio por conceito**
   (atualizado a cada exercício corrigido) e da memória de erros.
 
-Busca híbrida: similaridade vetorial (pgvector/HNSW) + busca textual (tsvector), combinadas
-com Reciprocal Rank Fusion — funciona com perguntas em português sobre livros em inglês.
+Busca: similaridade vetorial (pgvector/HNSW) + busca textual (tsvector), combinadas com
+Reciprocal Rank Fusion, e depois **reordenadas por um cross-encoder** (`bge-reranker-v2-m3`).
+Medido no livro *Mathematics for Machine Learning* (16 perguntas com a seção certa conhecida):
+acerto em 1º lugar 9 → 12, no top-3 14 → 15, MRR 0,71 → 0,83, em ~1 s por busca.
+
+- **Clique numa citação** e o livro abre ao lado do chat **na página citada, com o trecho destacado**.
+- **"Isso não está nos seus livros"**: se nenhum trecho for relevante (similaridade bge-m3 < 0,46),
+  o tutor diz isso em vez de improvisar. Funciona com pergunta em português sobre livro em inglês.
+- **Alta fidelidade (Docling)**: no envio do PDF (ou pelo botão Σ num livro já importado), as
+  fórmulas em destaque viram LaTeX de verdade. Recomendado para livros de matemática;
+  ~7 s/página (o modo rápido faz ~1 s/página e quebra fórmulas).
 
 > **Qualidade:** o modelo local de 7B serve para testar, mas segue mal formatos e inventa
 > detalhes em roadmaps. Para estudar de verdade, configure `GEMINI_API_KEY` (gratuita) no `.env`.
@@ -155,6 +164,9 @@ Clique no ícone de **fone** na caixa de mensagem e fale naturalmente — sem ap
 - **Fale por cima do tutor para interrompê-lo** — ele para na hora e a parte já dita fica no histórico.
 - Nos turnos de voz o tutor responde curto (2–3 frases); correções detalhadas ficam no Feedback.
 - Velocidade da voz ajustável em Configurações (útil no começo de um idioma).
+- **Fórmulas são faladas**, não puladas: `\frac{\partial L}{\partial w}` → "derivada parcial de L em
+  relação a w"; `\sum_{i=1}^{n} x_i^2` → "somatório de i igual a 1 até n de x índice i ao quadrado"
+  (português, inglês e espanhol; conversão determinística, sem LLM).
 
 Latência medida (do fim da sua fala ao início da resposta falada): **~5–8 s com Gemini**.
 Para conversar com fluidez (~2 s), adicione uma `GROQ_API_KEY` gratuita: na voz, a ordem é
@@ -257,6 +269,9 @@ language/
 │   ├── pronunciation.py    # Avaliação de pronúncia por fonemas (wav2vec2 + GOP)
 │   ├── drills.py           # Exercícios de sons difíceis para brasileiros
 │   ├── review.py           # Revisão espaçada (SM-2) e progresso
+│   ├── reranker.py         # Cross-encoder que reordena a busca
+│   ├── docling_parser.py   # Ingestão de alta fidelidade (fórmulas em LaTeX)
+│   ├── math_speech.py      # LaTeX → fala (pt/en/es)
 │   ├── tts.py              # Kokoro / Piper
 │   └── tests/              # pytest
 ├── frontend/               # Interface React (Vite)

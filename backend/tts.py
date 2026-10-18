@@ -13,6 +13,7 @@ from typing import Optional
 import numpy as np
 
 import config
+from math_speech import speak_math
 
 log = logging.getLogger("tutor.tts")
 
@@ -41,11 +42,14 @@ PIPER_VOICES = {
 }
 
 
-def clean_for_speech(text: str) -> str:
-    """Remove markdown, código e LaTeX para não serem lidos em voz alta."""
-    text = re.sub(r"```.*?```", " (código na tela) ", text, flags=re.DOTALL)
-    text = re.sub(r"\$\$.*?\$\$", " (fórmula na tela) ", text, flags=re.DOTALL)
-    text = re.sub(r"\$[^$\n]+\$", " (fórmula) ", text)
+_CODE_ON_SCREEN = {"pt": "(código na tela)", "en": "(code on screen)", "es": "(código en pantalla)"}
+
+
+def clean_for_speech(text: str, lang: str = "pt") -> str:
+    """Prepara o texto para o TTS: fórmulas viram fala natural; código e markdown saem."""
+    text = re.sub(r"```.*?```", f" {_CODE_ON_SCREEN.get(lang, '')} ", text, flags=re.DOTALL)
+    # Fórmulas são LIDAS ("derivada parcial de L em relação a w"), não descartadas
+    text = speak_math(text, lang)
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
     text = re.sub(r"[*_#>|]+", "", text)
@@ -120,7 +124,7 @@ def status() -> dict[str, bool]:
 
 def synthesize(text: str, lang: str, speed: float = 1.0) -> tuple[bytes, str]:
     """Retorna (wav_bytes, motor_usado). Lança RuntimeError se nenhum motor servir."""
-    text = clean_for_speech(text)
+    text = clean_for_speech(text, lang)
     if not text:
         raise RuntimeError("Texto vazio após limpeza.")
     errors = []

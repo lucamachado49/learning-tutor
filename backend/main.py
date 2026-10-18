@@ -456,7 +456,8 @@ async def chat_stream(req: ChatRequest):
     if req.fast and not action:
         system += (
             "\n\nCONVERSA POR VOZ: o aluno está falando com você em tempo real. A [MENSAGEM] deve "
-            "ser curta e natural como numa conversa (2 a 3 frases, sem listas nem markdown), "
+            "ser curta e natural como numa conversa (2 a 3 frases, sem listas nem markdown; "
+            "fórmulas curtas podem ir em LaTeX $...$, o sistema as lê em voz alta), "
             "terminando com uma pergunta. Detalhes ficam no [FEEDBACK PEDAGÓGICO]."
         )
     api_messages = [{"role": "system", "content": system}]
