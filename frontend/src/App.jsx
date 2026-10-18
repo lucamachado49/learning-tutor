@@ -7,6 +7,7 @@ import SettingsModal from './components/SettingsModal'
 import LibraryModal from './components/LibraryModal'
 import PronunciationModal from './components/PronunciationModal'
 import TodayModal from './components/TodayModal'
+import PdfPanel from './components/PdfPanel'
 import { VoiceProvider } from './hooks/useVoiceMode'
 
 function AppLayout() {
@@ -24,6 +25,9 @@ function AppLayout() {
         <ChatArea />
         <InputBar />
       </main>
+
+      {/* Livro aberto na página citada */}
+      <PdfPanel />
 
       {/* Modal de configurações (overlay) */}
       <SettingsModal />

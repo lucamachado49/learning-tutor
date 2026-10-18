@@ -109,8 +109,7 @@ def test_off_topic_question_is_flagged_as_not_in_sources(client, fake_llm, monke
 
     monkeypatch.setattr(library, "search", lambda *a, **k: [
         {"book_id": "b", "book": "Livro", "section": "s", "page_start": 1, "page_end": 1,
-         "kind": "text", "content": "x", "rerank_score": -4.0}])
-    monkeypatch.setattr(reranker, "available", lambda: True)
+         "kind": "text", "content": "x", "vsim": 0.38}])
     fake_llm(Spy("fake"))
     sid = client.post("/api/sessions", json={"domain": "math_ml", "book_ids": ["b"]}).json()["id"]
     client.post("/api/chat/stream", json={"session_id": sid, "message": "receita de bolo"})

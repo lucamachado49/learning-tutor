@@ -63,7 +63,8 @@ CHUNK_CHARS = int(_env("CHUNK_CHARS", "1500"))
 RERANK_ENABLED   = _env("RERANK_ENABLED", "1") == "1"
 RERANK_MODEL     = _env("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
 RERANK_CANDIDATES = int(_env("RERANK_CANDIDATES", "30"))
-RERANK_MIN_SCORE = float(_env("RERANK_MIN_SCORE", "-2.0"))  # abaixo disso: "não está nas fontes"
+# Recusa calibrada: similaridade bge-m3 mínima do melhor trecho (abaixo: "não está nos livros")
+RELEVANCE_MIN_SIM = float(_env("RELEVANCE_MIN_SIM", "0.46"))
 
 # --- Logs --------------------------------------------------------------
 LOG_LEVEL  = _env("LOG_LEVEL", "INFO")

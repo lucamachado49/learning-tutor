@@ -29,7 +29,7 @@ from typing import AsyncGenerator, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 import config
@@ -412,7 +412,7 @@ async def chat_stream(req: ChatRequest):
         except Exception as exc:
             log.warning("Busca na biblioteca falhou: %s", exc)
     # Recusa calibrada: nenhum trecho relevante → o tutor diz que não está nos livros
-    off_topic = bool(book_ids) and not action and references and not reranker.is_relevant(references)
+    off_topic = bool(book_ids) and not action and references and not library.is_relevant(references)
     if off_topic:
         references = []
     outline = library.toc_outline(book_ids) if action == "roadmap" and book_ids else ""
@@ -649,6 +649,17 @@ def get_book(book_id: str):
     if not book:
         raise HTTPException(status_code=404, detail="Livro não encontrado.")
     return book
+
+
+@app.get("/api/books/{book_id}/file")
+def book_file(book_id: str):
+    """O PDF original, para o visualizador (abre na página citada)."""
+    if not library.get_book(book_id):
+        raise HTTPException(status_code=404, detail="Livro não encontrado.")
+    path = library.book_path(book_id)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Arquivo do livro não encontrado.")
+    return FileResponse(path, media_type="application/pdf")
 
 
 @app.delete("/api/books/{book_id}")

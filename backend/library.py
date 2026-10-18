@@ -224,7 +224,8 @@ WITH v AS (
     LIMIT 30
 )
 SELECT c.id, c.book_id, b.title AS book, c.section, c.page_start, c.page_end, c.kind, c.content,
-       COALESCE(1.0 / (60 + v.r), 0) + COALESCE(1.0 / (60 + t.r), 0) AS score
+       COALESCE(1.0 / (60 + v.r), 0) + COALESCE(1.0 / (60 + t.r), 0) AS score,
+       1 - (c.embedding <=> CAST(:qvec AS vector)) AS vsim
 FROM (SELECT id FROM v UNION SELECT id FROM t) u
 JOIN chunks c ON c.id = u.id
 JOIN books b ON b.id = c.book_id
@@ -255,6 +256,17 @@ def search(query: str, book_ids: list[str], k: int = config.RAG_TOP_K, kind: str
         }).mappings().all()
     candidates = [dict(r) for r in rows]
     return reranker.rerank(query, candidates, k) if rerank else candidates
+
+
+def is_relevant(results: list[dict]) -> bool:
+    """Algum trecho é de fato sobre a pergunta? (base da recusa calibrada)
+
+    Usa a similaridade do bge-m3 — alinhada entre línguas. A nota do reranker NÃO serve para
+    isso: pergunta em português sobre livro em inglês recebe nota baixa mesmo quando relevante.
+    Medido (4 livros): fora de tema 0,38–0,45; relevantes 0,48–0,70.
+    """
+    sims = [r["vsim"] for r in results if r.get("vsim") is not None]
+    return not sims or max(sims) >= config.RELEVANCE_MIN_SIM
 
 
 def toc_outline(book_ids: list[str], max_level: int = 2, max_lines: int = 160) -> str:

@@ -66,3 +66,10 @@ textarea { resize: none; }
 .markdown table { border-collapse: collapse; }
 .markdown th, .markdown td { border: 1px solid #e5e5e5; padding: 0.3em 0.6em; }
 .markdown .katex-display { overflow-x: auto; overflow-y: hidden; }
+
+/* ── Trecho citado destacado no PDF ── */
+.react-pdf__Page__textContent mark.pdf-hit {
+  background: rgba(251, 191, 36, 0.45);
+  color: transparent;
+  border-radius: 2px;
+}

@@ -95,8 +95,3 @@ def rerank(query: str, candidates: list[dict], k: int, text_key: str = "content"
         log.warning("Reranking falhou, mantendo a ordem híbrida: %s", exc)
         return candidates[:k]
 
-
-def is_relevant(results: list[dict], threshold: Optional[float] = None) -> bool:
-    """Há algum trecho realmente relevante? (base da recusa calibrada)"""
-    threshold = config.RERANK_MIN_SCORE if threshold is None else threshold
-    return any(r.get("rerank_score", threshold) >= threshold for r in results)

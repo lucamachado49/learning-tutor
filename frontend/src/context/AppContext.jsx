@@ -52,6 +52,8 @@ export function AppProvider({ children }) {
   const [pronunciation, setPronunciation] = useState(null)
   // Painel "Hoje" (revisão espaçada) e contador de itens vencidos
   const [todayOpen, setTodayOpen] = useState(false)
+  // Visualizador de PDF: null ou { bookId, title, page, pageEnd, section, snippet }
+  const [pdfView, setPdfView] = useState(null)
   const [dueCount, setDueCount]   = useState(0)
   const [isStreaming, setIsStreaming]   = useState(false)
 
@@ -239,6 +241,7 @@ export function AppProvider({ children }) {
       libraryOpen, setLibraryOpen,
       pronunciation, setPronunciation,
       todayOpen, setTodayOpen, dueCount, refreshToday,
+      pdfView, setPdfView,
       isStreaming, setIsStreaming,
       // config
       settings, setSettings, setBookIds,

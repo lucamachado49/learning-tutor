@@ -6,7 +6,7 @@ import { fetchTTS } from '../lib/api'
 import Markdown, { visiblePart } from './Markdown'
 
 export default function MessageItem({ message }) {
-  const { settings, setPronunciation } = useApp()
+  const { settings, setPronunciation, setPdfView } = useApp()
   const { role, content, feedback, streaming, isError, provider, citations, verified } = message
   const [citesOpen, setCitesOpen] = useState(false)
 
@@ -158,14 +158,18 @@ export default function MessageItem({ message }) {
             {citesOpen && citations?.length > 0 && (
               <div className="animate-slide-up space-y-1.5">
                 {citations.map(c => (
-                  <div key={c.n} className="bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2">
+                  <button key={c.n}
+                       onClick={() => setPdfView({ bookId: c.book_id, title: c.book, page: c.page_start,
+                                                   pageEnd: c.page_end, section: c.section, snippet: c.snippet })}
+                       title="Abrir o livro nesta página"
+                       className="block w-full text-left bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 hover:border-neutral-400 hover:bg-white transition-colors">
                     <p className="text-xs font-medium text-neutral-700">
                       [{c.n}] {c.book} — p. {c.page_start}{c.page_end !== c.page_start ? `–${c.page_end}` : ''}
                       {c.kind === 'exercise' && <span className="ml-1.5 text-amber-600">· exercício</span>}
                     </p>
                     {c.section && <p className="text-[11px] text-neutral-400 truncate">{c.section}</p>}
                     <p className="text-xs text-neutral-500 mt-1 line-clamp-3">{c.snippet}</p>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}

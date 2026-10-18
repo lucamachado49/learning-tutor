@@ -58,3 +58,9 @@ def test_build_tsquery_is_safe_or_query():
 def test_chunkdraft_defaults():
     d = ChunkDraft("s", 1, 1, "text", "")
     assert d.parts == []
+
+
+def test_relevance_uses_embedding_similarity():
+    assert library.is_relevant([{"vsim": 0.66, "rerank_score": -3.0}])   # PT × livro EN: relevante
+    assert not library.is_relevant([{"vsim": 0.40}, {"vsim": 0.44}])      # fora de tema
+    assert library.is_relevant([])                                         # sem dados: não recusa
