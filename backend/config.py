@@ -33,7 +33,7 @@ GEMINI_MODEL   = _env("GEMINI_MODEL", "gemini-flash-latest")  # alias: sempre o 
 GROQ_API_KEY = _env("GROQ_API_KEY")
 GROQ_MODEL   = _env("GROQ_MODEL", "openai/gpt-oss-120b")   # llama-3.3 saiu do catálogo do Groq
 
-OLLAMA_BASE_URL = _env("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_BASE_URL = _env("OLLAMA_BASE_URL", "http://127.0.0.1:11434")  # localhost tenta IPv6 antes (~2 s no Windows)
 OLLAMA_MODEL    = _env("OLLAMA_MODEL", "qwen2.5:7b")
 
 # Quantas mensagens anteriores enviar ao LLM (limita contexto/latência)
@@ -51,7 +51,7 @@ KOKORO_VOICES = KOKORO_DIR / "voices-v1.0.bin"
 PIPER_DIR    = MODELS_DIR / "piper"
 
 # --- Banco -------------------------------------------------------------
-DATABASE_URL = _env("DATABASE_URL", "postgresql+psycopg://tutor:tutor@127.0.0.1:5433/tutor")
+DATABASE_URL = _env("DATABASE_URL", "postgresql+psycopg://tutor:tutor@127.0.0.1:5434/tutor")
 
 # --- Biblioteca (RAG) ---------------------------------------------------
 BOOKS_DIR   = Path(_env("BOOKS_DIR", str(ROOT_DIR / "data" / "books")))
@@ -59,6 +59,11 @@ EMBED_MODEL = _env("EMBED_MODEL", "bge-m3")       # via Ollama
 EMBED_DIM   = 1024                                # dimensão do bge-m3 (fixa no esquema)
 RAG_TOP_K   = int(_env("RAG_TOP_K", "6"))
 CHUNK_CHARS = int(_env("CHUNK_CHARS", "1500"))
+# Reranker (cross-encoder): reordena os candidatos da busca híbrida
+RERANK_ENABLED   = _env("RERANK_ENABLED", "1") == "1"
+RERANK_MODEL     = _env("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+RERANK_CANDIDATES = int(_env("RERANK_CANDIDATES", "30"))
+RERANK_MIN_SCORE = float(_env("RERANK_MIN_SCORE", "-2.0"))  # abaixo disso: "não está nas fontes"
 
 # --- Logs --------------------------------------------------------------
 LOG_LEVEL  = _env("LOG_LEVEL", "INFO")

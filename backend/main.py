@@ -35,6 +35,7 @@ from pydantic import BaseModel
 import config
 import db
 import library
+import reranker
 import llm
 import tts
 import verifier
@@ -95,6 +96,7 @@ def _get_whisper() -> Optional["WhisperModel"]:
 def _warm_whisper() -> None:
     _get_whisper()          # carrega, valida o dispositivo e aquece
     pronunciation.warm()    # modelo de fonemas (avaliação de pronúncia)
+    reranker.warm()         # cross-encoder da busca na biblioteca
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +411,10 @@ async def chat_stream(req: ChatRequest):
                 references = await asyncio.to_thread(library.search, query, book_ids)
         except Exception as exc:
             log.warning("Busca na biblioteca falhou: %s", exc)
+    # Recusa calibrada: nenhum trecho relevante → o tutor diz que não está nos livros
+    off_topic = bool(book_ids) and not action and references and not reranker.is_relevant(references)
+    if off_topic:
+        references = []
     outline = library.toc_outline(book_ids) if action == "roadmap" and book_ids else ""
 
     if action == "review":
@@ -437,6 +443,12 @@ async def chat_stream(req: ChatRequest):
             "mais do que nas suas próprias contas):\n" + answer_key + "\n"
             "Compare a resposta do aluno com o gabarito. Se divergir, a resposta está ERRADA: "
             "aponte exatamente onde está o erro, sem elogiar o resultado incorreto."
+        )
+    if off_topic:
+        system += (
+            "\n\nOs livros do aluno NÃO têm trechos relevantes para esta pergunta. Comece a "
+            "[MENSAGEM] dizendo isso claramente (\"Isso não está nos seus livros\"); depois, se "
+            "fizer sentido, responda com conhecimento geral deixando explícito que não vem das fontes."
         )
     if req.fast and not action:
         system += (

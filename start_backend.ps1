@@ -12,7 +12,7 @@ if (-not (Test-Path $VenvPython)) {
     exit 1
 }
 
-# O backend em container ocupa a porta 8000; para o modo dev ele precisa estar parado
+# O backend em container usa a mesma porta (8010); para o modo dev ele precisa estar parado
 docker compose -f (Join-Path $Root "docker-compose.yml") stop backend 2>$null | Out-Null
 
 Write-Host "Subindo PostgreSQL (docker compose)..." -ForegroundColor Cyan
@@ -23,9 +23,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "  API:  http://127.0.0.1:8000" -ForegroundColor Green
-Write-Host "  Docs: http://127.0.0.1:8000/docs" -ForegroundColor Green
+Write-Host "  API:  http://127.0.0.1:8010" -ForegroundColor Green
+Write-Host "  Docs: http://127.0.0.1:8010/docs" -ForegroundColor Green
 Write-Host ""
 
 # Migracoes do Alembic rodam automaticamente no startup
-& $VenvPython -m uvicorn main:app --reload --host 127.0.0.1 --port 8000 --app-dir $BackendDir
+& $VenvPython -m uvicorn main:app --reload --host 127.0.0.1 --port 8010 --app-dir $BackendDir

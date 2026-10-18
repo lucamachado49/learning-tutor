@@ -95,3 +95,24 @@ def test_review_judge_grades_when_tutor_forgets(client, fake_llm):
 
     assert len(db.get_session(sid)["review_ids"]) == 1          # R1 avaliado, R2 segue pendente
     assert client.get("/api/review/today?domain=en").json()["done_today"] == 1
+
+
+def test_off_topic_question_is_flagged_as_not_in_sources(client, fake_llm, monkeypatch):
+    import library
+    import reranker
+    seen = {}
+
+    class Spy(FakeProvider):
+        async def stream(self, messages, temperature, fast=False):
+            seen["system"] = messages[0]["content"]
+            yield "[MENSAGEM]\nIsso não está nos seus livros."
+
+    monkeypatch.setattr(library, "search", lambda *a, **k: [
+        {"book_id": "b", "book": "Livro", "section": "s", "page_start": 1, "page_end": 1,
+         "kind": "text", "content": "x", "rerank_score": -4.0}])
+    monkeypatch.setattr(reranker, "available", lambda: True)
+    fake_llm(Spy("fake"))
+    sid = client.post("/api/sessions", json={"domain": "math_ml", "book_ids": ["b"]}).json()["id"]
+    client.post("/api/chat/stream", json={"session_id": sid, "message": "receita de bolo"})
+    assert "NÃO têm trechos relevantes" in seen["system"]
+    assert "MATERIAIS DE REFERÊNCIA" not in seen["system"]

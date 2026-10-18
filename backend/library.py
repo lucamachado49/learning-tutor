@@ -22,6 +22,7 @@ from sqlalchemy import delete, select, text, update
 
 import config
 import db
+import reranker
 from models import Book, Chunk
 
 log = logging.getLogger("tutor.library")
@@ -240,16 +241,20 @@ def build_tsquery(query: str) -> str:
     return " | ".join(words)
 
 
-def search(query: str, book_ids: list[str], k: int = config.RAG_TOP_K, kind: str = "") -> list[dict]:
+def search(query: str, book_ids: list[str], k: int = config.RAG_TOP_K, kind: str = "",
+           rerank: bool = True) -> list[dict]:
+    """Busca híbrida (vetor + BM25 + RRF) → reranker cross-encoder → top-k."""
     if not book_ids or not query.strip():
         return []
     qvec = embed([query])[0]
+    pool = max(k, config.RERANK_CANDIDATES) if rerank else k
     with db.session_scope() as s:
         rows = s.execute(_HYBRID_SQL, {
             "qvec": "[" + ",".join(f"{x:.6f}" for x in qvec) + "]",
-            "tsq": build_tsquery(query), "ids": book_ids, "kind": kind, "k": k,
+            "tsq": build_tsquery(query), "ids": book_ids, "kind": kind, "k": pool,
         }).mappings().all()
-    return [dict(r) for r in rows]
+    candidates = [dict(r) for r in rows]
+    return reranker.rerank(query, candidates, k) if rerank else candidates
 
 
 def toc_outline(book_ids: list[str], max_level: int = 2, max_lines: int = 160) -> str:

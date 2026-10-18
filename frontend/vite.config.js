@@ -20,7 +20,7 @@ export default defineConfig({
       '/api': {
         // Usa 127.0.0.1 explícito — no Windows, "localhost" pode resolver
         // para IPv6 (::1) enquanto o uvicorn escuta apenas em IPv4.
-        target: 'http://127.0.0.1:8000',
+        target: `http://127.0.0.1:${process.env.BACKEND_PORT ?? 8010}`,
         changeOrigin: true,
         secure: false,
         ws: true, // necessário para SSE / WebSocket
@@ -28,7 +28,7 @@ export default defineConfig({
           proxy.on('error', (err, _req, res) => {
             console.error('\n[Vite Proxy] Backend indisponível:', err.message)
             console.error('  → Certifique-se de que o backend está rodando:')
-            console.error('  → cd backend && python -m uvicorn main:app --reload --port 8000\n')
+            console.error('  → cd backend && python -m uvicorn main:app --reload --port 8010\n')
             // Responde com JSON de erro em vez de deixar o browser travar
             if (res && !res.headersSent) {
               res.writeHead(503, { 'Content-Type': 'application/json' })
