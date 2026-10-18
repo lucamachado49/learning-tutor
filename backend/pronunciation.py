@@ -21,6 +21,8 @@ from typing import Optional
 
 import numpy as np
 
+from model_lock import LOAD_LOCK
+
 log = logging.getLogger("tutor.pronunciation")
 
 PHONEME_MODEL = "facebook/wav2vec2-lv-60-espeak-cv-ft"   # reconhecedor de fonemas multilíngue (IPA)
@@ -281,7 +283,7 @@ def _load():
     global _model, _processor, _device
     if _model is not None:
         return
-    with _lock:
+    with LOAD_LOCK:
         if _model is not None:
             return
         import torch

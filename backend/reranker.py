@@ -16,6 +16,7 @@ import threading
 from typing import Optional
 
 import config
+from model_lock import LOAD_LOCK
 
 log = logging.getLogger("tutor.reranker")
 
@@ -41,7 +42,7 @@ def _load() -> bool:
     global _model, _tokenizer, _device, _failed
     if _model is not None:
         return True
-    with _lock:
+    with LOAD_LOCK:
         if _model is not None:
             return True
         try:

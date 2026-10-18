@@ -22,6 +22,7 @@ from sqlalchemy import delete, select, text, update
 
 import config
 import db
+import docling_parser
 import reranker
 from models import Book, Chunk
 
@@ -96,18 +97,26 @@ def split_into_chunks(pages: list[tuple[int, str]], toc: list[list], max_chars: 
     return chunks
 
 
-def extract_pdf(path: Path) -> tuple[list[tuple[int, str]], list[list], int, str]:
-    """Retorna (páginas [(nº, markdown)], toc, total_de_páginas, título)."""
+def extract_pdf(path: Path, parser: str = "fast", on_progress=None) -> tuple[list[tuple[int, str]], list[list], int, str]:
+    """Retorna (páginas [(nº, markdown)], toc, total_de_páginas, título).
+
+    parser="docling": alta fidelidade (fórmulas em LaTeX, ~7 s/página); "fast": PyMuPDF4LLM.
+    O sumário (TOC) vem sempre do PDF.
+    """
     import pymupdf
     import pymupdf4llm
 
     doc = pymupdf.open(path)
     toc = [[lvl, title, page] for lvl, title, page in doc.get_toc(simple=True)]
     title = (doc.metadata or {}).get("title") or path.stem
-    page_dicts = pymupdf4llm.to_markdown(doc, page_chunks=True, show_progress=False)
-    pages = [(i + 1, d.get("text", "")) for i, d in enumerate(page_dicts)]
     total = doc.page_count
-    doc.close()
+    if parser == "docling" and docling_parser.available():
+        doc.close()
+        pages = docling_parser.extract_pages(path, total, on_progress)
+    else:
+        page_dicts = pymupdf4llm.to_markdown(doc, page_chunks=True, show_progress=False)
+        pages = [(i + 1, d.get("text", "")) for i, d in enumerate(page_dicts)]
+        doc.close()
     return pages, toc, total, title
 
 
@@ -141,8 +150,15 @@ def _set(book_id: str, **fields) -> None:
 def ingest_book(book_id: str) -> None:
     """Processa um livro já marcado como 'processing'. Erros ficam registrados no livro."""
     try:
-        pages, toc, total, pdf_title = extract_pdf(book_path(book_id))
-        _set(book_id, pages=total, toc=toc, progress=0.15)
+        with db.session_scope() as s:
+            parser = (s.get(Book, book_id).parser or "fast")
+        # Docling: extração é a parte longa → ocupa de 5% a 60% da barra de progresso
+        pages, toc, total, pdf_title = extract_pdf(
+            book_path(book_id), parser,
+            on_progress=lambda f: _set(book_id, progress=round(0.05 + 0.55 * f, 3)),
+        )
+        base = 0.6 if parser == "docling" else 0.15
+        _set(book_id, pages=total, toc=toc, progress=base)
         with db.session_scope() as s:
             book = s.get(Book, book_id)
             if book and book.title == book.filename and pdf_title:
@@ -165,7 +181,7 @@ def ingest_book(book_id: str) -> None:
                         book_id=book_id, seq=i + j, section=d.section, page_start=d.page_start,
                         page_end=d.page_end, kind=d.kind, content=d.content, embedding=vec,
                     ))
-            _set(book_id, progress=round(0.15 + 0.85 * (i + len(part)) / len(drafts), 3))
+            _set(book_id, progress=round(base + (1 - base) * (i + len(part)) / len(drafts), 3))
 
         _set(book_id, status="ready", progress=1.0, error="")
         log.info("Livro %s importado: %d trechos", book_id, len(drafts))
@@ -288,15 +304,17 @@ def _book_dict(b: Book) -> dict:
     return {
         "id": b.id, "title": b.title, "filename": b.filename, "domain": b.domain,
         "status": b.status, "progress": b.progress, "error": b.error, "pages": b.pages,
+        "parser": b.parser or "fast",
         "chapters": sum(1 for lvl, *_ in (b.toc or []) if lvl == 1),
         "created_at": b.created_at.isoformat(),
     }
 
 
-def create_book(filename: str, data: bytes, domain: str = "") -> dict:
+def create_book(filename: str, data: bytes, domain: str = "", parser: str = "fast") -> dict:
     config.BOOKS_DIR.mkdir(parents=True, exist_ok=True)
+    parser = parser if parser in ("fast", "docling") else "fast"
     with db.session_scope() as s:
-        book = Book(title=filename, filename=filename, domain=domain)
+        book = Book(title=filename, filename=filename, domain=domain, parser=parser)
         s.add(book)
         s.flush()
         book_path(book.id).write_bytes(data)
@@ -321,5 +339,9 @@ def delete_book(book_id: str) -> None:
     book_path(book_id).unlink(missing_ok=True)
 
 
-def retry_book(book_id: str) -> None:
-    _set(book_id, status="queued", progress=0.0, error="")
+def retry_book(book_id: str, parser: Optional[str] = None) -> None:
+    """Reprocessa o livro (ex.: trocar para alta fidelidade)."""
+    fields = {"status": "queued", "progress": 0.0, "error": ""}
+    if parser in ("fast", "docling"):
+        fields["parser"] = parser
+    _set(book_id, **fields)

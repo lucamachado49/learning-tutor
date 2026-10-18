@@ -28,7 +28,7 @@ nvidia-cudnn-cu12>=9,<10; sys_platform == "win32"
 # GPU: pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 # (traz cuDNN 9.7, compatível com o Whisper; ver cuda_setup.py)
 torch>=2.7
-transformers>=4.46,<5
+transformers>=4.53,<5   # 4.53+: arquitetura rt_detr_v2 do layout do Docling
 
 # --- Text-to-Speech ---
 kokoro-onnx>=0.4.0
@@ -41,6 +41,12 @@ numpy>=1.26.0
 # --- Biblioteca (PDF) ---
 pymupdf>=1.24
 pymupdf4llm>=0.0.17
+
+# --- Ingestão de alta fidelidade (fórmulas em LaTeX) ---
+# Instale com o torch travado para não trocar a build CUDA:
+#   pip install torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
+#   pip install docling==2.130.0 -c constraints.txt   (torch==2.7.1+cu128, torchvision==0.22.1+cu128)
+docling==2.130.0
 
 # --- Verificação matemática ---
 sympy>=1.13

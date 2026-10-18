@@ -203,10 +203,11 @@ export async function getBooks() {
   return r.json()
 }
 
-export async function uploadBook(file, domain) {
+export async function uploadBook(file, domain, parser = 'fast') {
   const form = new FormData()
   form.append('file', file)
   form.append('domain', domain)
+  form.append('parser', parser)
   const r = await fetch(`${BASE}/books`, { method: 'POST', body: form })
   if (!r.ok) {
     const err = await r.json().catch(() => ({}))
@@ -219,8 +220,9 @@ export async function deleteBook(id) {
   await fetch(`${BASE}/books/${id}`, { method: 'DELETE' })
 }
 
-export async function retryBook(id) {
-  await fetch(`${BASE}/books/${id}/retry`, { method: 'POST' })
+export async function retryBook(id, parser = null) {
+  const q = parser ? `?parser=${parser}` : ''
+  await fetch(`${BASE}/books/${id}/retry${q}`, { method: 'POST' })
 }
 
 export async function setSessionBooks(sessionId, bookIds) {

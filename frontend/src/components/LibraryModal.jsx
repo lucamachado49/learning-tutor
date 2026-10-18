@@ -1,7 +1,7 @@
 // src/components/LibraryModal.jsx
 // Biblioteca: envio de PDFs, acompanhamento da importação e escolha dos livros usados como base.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { X, Upload, Trash2, RotateCcw, Loader2, BookOpen, CheckSquare, Square } from 'lucide-react'
+import { X, Upload, Trash2, RotateCcw, Loader2, BookOpen, CheckSquare, Square, Sigma } from 'lucide-react'
 import { DOMAINS, useApp } from '../context/AppContext'
 import * as api from '../lib/api'
 
@@ -13,10 +13,12 @@ const STATUS = {
 }
 
 export default function LibraryModal() {
-  const { libraryOpen, setLibraryOpen, settings, setBookIds, currentSession } = useApp()
+  const { libraryOpen, setLibraryOpen, settings, setBookIds, currentSession, health } = useApp()
   const [books, setBooks]       = useState([])
   const [uploading, setUploading] = useState(false)
   const [error, setError]       = useState(null)
+  // Alta fidelidade (Docling): fórmulas em LaTeX; ligado por padrão em domínios técnicos
+  const [hiFi, setHiFi]         = useState(DOMAINS[settings.language]?.kind === 'tech')
   const fileRef = useRef(null)
 
   const refresh = useCallback(() => api.getBooks().then(setBooks), [])
@@ -37,7 +39,7 @@ export default function LibraryModal() {
     setError(null)
     setUploading(true)
     try {
-      for (const file of files) await api.uploadBook(file, settings.language)
+      for (const file of files) await api.uploadBook(file, settings.language, hiFi && health.docling ? 'docling' : 'fast')
       await refresh()
     } catch (err) {
       setError(err.message)
@@ -101,6 +103,15 @@ export default function LibraryModal() {
           <input ref={fileRef} type="file" accept="application/pdf" multiple className="hidden"
                  disabled={uploading} onChange={e => handleFiles([...e.target.files])} />
         </label>
+        {health.docling && (
+          <label className="mt-2 flex items-start gap-2 text-xs text-neutral-600 cursor-pointer">
+            <input type="checkbox" checked={hiFi} onChange={e => setHiFi(e.target.checked)} className="mt-0.5 accent-neutral-900" />
+            <span>
+              <span className="font-medium text-neutral-800">Alta fidelidade</span> — fórmulas viram LaTeX (Docling).
+              Recomendado para livros de matemática; ~7 s por página (um livro de 400 páginas leva ~45 min).
+            </span>
+          </label>
+        )}
         {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
 
         {/* Lista */}
@@ -127,6 +138,7 @@ export default function LibraryModal() {
                   <p className="text-xs text-neutral-400 mt-0.5">
                     <span className={st.cls}>{st.label}</span>
                     {b.pages > 0 && ` · ${b.pages} páginas`}
+                    {b.parser === 'docling' && <span className="text-violet-600"> · alta fidelidade</span>}
                     {DOMAINS[b.domain] && ` · ${DOMAINS[b.domain].flag} ${DOMAINS[b.domain].label}`}
                   </p>
                   {(b.status === 'processing' || b.status === 'queued') && (
@@ -140,6 +152,11 @@ export default function LibraryModal() {
                   {b.status === 'error' && (
                     <button onClick={async () => { await api.retryBook(b.id); refresh() }} title="Tentar de novo"
                             className="p-1 text-neutral-400 hover:text-neutral-700"><RotateCcw className="w-3.5 h-3.5" /></button>
+                  )}
+                  {ready && b.parser !== 'docling' && health.docling && (
+                    <button onClick={async () => { await api.retryBook(b.id, 'docling'); refresh() }}
+                            title="Reprocessar em alta fidelidade (fórmulas em LaTeX)"
+                            className="p-1 text-neutral-400 hover:text-violet-600"><Sigma className="w-3.5 h-3.5" /></button>
                   )}
                   <button onClick={() => remove(b.id)} title="Remover"
                           className="p-1 text-neutral-300 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>

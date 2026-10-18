@@ -115,6 +115,8 @@ class Book(Base):
     error:      Mapped[str] = mapped_column(Text, default="")
     pages:      Mapped[int] = mapped_column(Integer, default=0)
     toc:        Mapped[list] = mapped_column(JSON, default=list)   # [[nível, título, página], ...]
+    # Extrator: "fast" (PyMuPDF4LLM) ou "docling" (alta fidelidade: fórmulas em LaTeX)
+    parser:     Mapped[str] = mapped_column(String(16), default="fast")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     chunks: Mapped[list["Chunk"]] = relationship(

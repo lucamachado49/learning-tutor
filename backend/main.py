@@ -34,6 +34,7 @@ from pydantic import BaseModel
 
 import config
 import db
+import docling_parser
 import library
 import reranker
 import llm
@@ -48,6 +49,7 @@ setup_logging()
 log = logging.getLogger("tutor")
 
 import cuda_setup  # noqa: F401  (registra DLLs do CUDA antes do faster_whisper)
+from model_lock import LOAD_LOCK
 
 try:
     from faster_whisper import WhisperModel  # type: ignore
@@ -71,7 +73,7 @@ def _get_whisper() -> Optional["WhisperModel"]:
 
     import numpy as np
 
-    with _whisper_lock:  # aquecimento e requisições podem chegar juntos
+    with _whisper_lock, LOAD_LOCK:  # aquecimento e requisições podem chegar juntos
         if _whisper_model is not None:
             return _whisper_model
         for device, ctype, size in [
@@ -322,6 +324,7 @@ async def health():
         "tts": tts.status(),
         "database": await asyncio.to_thread(db.ping),
         "pronunciation": pronunciation.available(),
+        "docling": docling_parser.available(),
     }
 
 
@@ -621,7 +624,7 @@ MAX_BOOK_MB = 200
 
 
 @app.post("/api/books", status_code=201)
-async def upload_book(file: UploadFile = File(...), domain: str = Form("")):
+async def upload_book(file: UploadFile = File(...), domain: str = Form(""), parser: str = Form("fast")):
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Envie um arquivo PDF.")
     data = await file.read()
@@ -629,7 +632,7 @@ async def upload_book(file: UploadFile = File(...), domain: str = Form("")):
         raise HTTPException(status_code=413, detail=f"PDF maior que {MAX_BOOK_MB} MB.")
     if not data.startswith(b"%PDF"):
         raise HTTPException(status_code=400, detail="Arquivo não parece ser um PDF válido.")
-    return await asyncio.to_thread(library.create_book, file.filename, data, domain)
+    return await asyncio.to_thread(library.create_book, file.filename, data, domain, parser)
 
 
 @app.get("/api/books")
@@ -669,8 +672,9 @@ def delete_book(book_id: str):
 
 
 @app.post("/api/books/{book_id}/retry")
-def retry_book(book_id: str):
-    library.retry_book(book_id)
+def retry_book(book_id: str, parser: Optional[str] = None):
+    """Reprocessa o livro; parser=docling troca para alta fidelidade (fórmulas em LaTeX)."""
+    library.retry_book(book_id, parser)
     return {"ok": True}
 
 
